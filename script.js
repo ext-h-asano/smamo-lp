@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(updateCaseCarousel, 100);
     }
 
-    // 5. Modal Popup Logic
+    // 5. Modal Popup Logic + Stripe Payment Element
     const modal = document.getElementById('contactModal');
     const ctaButtons = document.querySelectorAll('a[href="#contact"], .cta-link-main[data-modal-trigger="true"]');
     const closeModal = document.getElementById('closeModal');
@@ -384,12 +384,68 @@ document.addEventListener('DOMContentLoaded', () => {
     const applicationForm = document.getElementById('applicationForm');
     const applicationFormStep2 = document.getElementById('applicationFormStep2');
     const submitBtn = document.getElementById('submitBtn');
+    const submitBtnStep2 = document.getElementById('submitBtnStep2');
     const smsOptionStep2 = document.getElementById('smsOptionStep2');
     const planOptionDivider = document.getElementById('planOptionDivider');
     const planOptionRow = document.getElementById('planOptionRow');
+    const planSummaryTitle = document.getElementById('planSummaryTitle');
+    const planSummaryPrice = document.getElementById('planSummaryPrice');
+    const planSummaryUnit = document.getElementById('planSummaryUnit');
+    const planSummaryRenewAmount = document.getElementById('planSummaryRenewAmount');
+    const planInitialFeeRow = document.getElementById('planInitialFeeRow');
+    const planInitialFeeAmount = document.getElementById('planInitialFeeAmount');
+    const paymentElementContainer = document.getElementById('payment-element');
+    const paymentElementError = document.getElementById('payment-element-error');
     const successMessage = document.getElementById('successMessage');
     const closeSuccessBtn = document.getElementById('closeSuccess');
     let resetModalTimer = null;
+
+    const PLANS = {
+        monthly: { title: 'スマモ 月額プラン', price: 3278, unit: '/月', hasInitFee: true, renewLabel: '/月（自動更新）' },
+        yearly: { title: 'スマモ 年払いプラン', price: 32780, unit: '/年', hasInitFee: true, renewLabel: '/年（自動更新）' },
+        two_year: { title: 'スマモ 2年契約プラン', price: 5478, unit: '/月', hasInitFee: false, renewLabel: '/月（2年契約・自動更新）' },
+    };
+    const INITIAL_FEE_TAX_INCL = 33000;
+    const SMS_PRICE_TAX_INCL = 550;
+
+    let selectedPlan = 'monthly';
+    let stripe = null;
+    let elements = null;
+    let stripeConfigPromise = null;
+    let paymentElementMounted = false;
+
+    function formatYen(n) {
+        return '¥' + n.toLocaleString('ja-JP');
+    }
+
+    function loadStripeConfig() {
+        if (!stripeConfigPromise) {
+            stripeConfigPromise = fetch('/api/config').then(r => r.json()).then(c => {
+                if (window.Stripe && c.publishable_key) {
+                    stripe = window.Stripe(c.publishable_key);
+                }
+                return c;
+            });
+        }
+        return stripeConfigPromise;
+    }
+
+    function updatePlanSummaryCard() {
+        const plan = PLANS[selectedPlan] || PLANS.monthly;
+        if (planSummaryTitle) planSummaryTitle.textContent = plan.title;
+        if (planSummaryPrice) planSummaryPrice.textContent = formatYen(plan.price);
+        if (planSummaryUnit) planSummaryUnit.textContent = plan.unit;
+        if (planSummaryRenewAmount) planSummaryRenewAmount.textContent = formatYen(plan.price) + plan.renewLabel;
+        if (planInitialFeeRow) planInitialFeeRow.style.display = plan.hasInitFee ? 'flex' : 'none';
+        if (planInitialFeeAmount) planInitialFeeAmount.textContent = formatYen(INITIAL_FEE_TAX_INCL);
+        updatePlanOptionSummary();
+    }
+
+    function updatePlanOptionSummary() {
+        const isChecked = Boolean(smsOptionStep2?.checked);
+        if (planOptionDivider) planOptionDivider.style.display = isChecked ? 'block' : 'none';
+        if (planOptionRow) planOptionRow.style.display = isChecked ? 'flex' : 'none';
+    }
 
     if (modal) {
         function openModal() {
@@ -397,8 +453,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearTimeout(resetModalTimer);
                 resetModalTimer = null;
             }
+            updatePlanSummaryCard();
             modal.classList.add('is-active');
             document.body.style.overflow = 'hidden';
+            loadStripeConfig();
         }
 
         function closeModalAndReset() {
@@ -407,25 +465,19 @@ document.addEventListener('DOMContentLoaded', () => {
             resetModal();
         }
 
-        // Open Modal
         ctaButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
+                const plan = btn.getAttribute('data-plan');
+                if (plan && PLANS[plan]) selectedPlan = plan;
                 openModal();
             });
         });
 
-        // Close Modal (Close X)
         closeModal?.addEventListener('click', closeModalAndReset);
-
-        // Close Modal (Overlay Click)
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModalAndReset();
-            }
+            if (e.target === modal) closeModalAndReset();
         });
-
-        // Close Modal (Success Message Close)
         closeSuccessBtn?.addEventListener('click', closeModalAndReset);
 
         function resetModal() {
@@ -433,33 +485,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (modalFormArea) modalFormArea.style.display = 'block';
                 if (modalFormAreaStep2) modalFormAreaStep2.style.display = 'none';
                 if (successMessage) successMessage.style.display = 'none';
-                if (submitBtn) {
-                    submitBtn.classList.remove('loading');
-                    submitBtn.disabled = false;
-                }
+                if (submitBtn) { submitBtn.classList.remove('loading'); submitBtn.disabled = false; }
+                if (submitBtnStep2) { submitBtnStep2.classList.remove('loading'); submitBtnStep2.disabled = false; }
                 applicationForm?.reset();
                 applicationFormStep2?.reset();
-                applicationForm?.querySelectorAll('.form-group').forEach(group => group.classList.remove('has-error'));
-                applicationFormStep2?.querySelectorAll('.form-group').forEach(group => group.classList.remove('has-error'));
+                applicationForm?.querySelectorAll('.form-group').forEach(g => g.classList.remove('has-error'));
+                applicationFormStep2?.querySelectorAll('.form-group').forEach(g => g.classList.remove('has-error'));
+                if (paymentElementError) {
+                    paymentElementError.style.display = 'none';
+                    paymentElementError.textContent = '';
+                }
+                if (elements) {
+                    try { elements.getElement('payment')?.unmount(); } catch (_) {}
+                    elements = null;
+                }
+                paymentElementMounted = false;
                 updatePlanOptionSummary();
                 resetModalTimer = null;
-            }, 500); // Wait for transition out
-        }
-
-        function updatePlanOptionSummary() {
-            const isChecked = Boolean(smsOptionStep2?.checked);
-            if (planOptionDivider) {
-                planOptionDivider.style.display = isChecked ? 'block' : 'none';
-            }
-            if (planOptionRow) {
-                planOptionRow.style.display = isChecked ? 'flex' : 'none';
-            }
+            }, 500);
         }
 
         function validateModalForm(form, termsId) {
             let isValid = true;
             const inputs = form.querySelectorAll('input[required]');
-
             inputs.forEach(input => {
                 const group = input.closest('.form-group');
                 if (!input.checkValidity()) {
@@ -469,48 +517,111 @@ document.addEventListener('DOMContentLoaded', () => {
                     group?.classList.remove('has-error');
                 }
             });
-
             if (termsId) {
                 const terms = document.getElementById(termsId);
-                if (terms && !terms.checked) {
-                    isValid = false;
-                }
+                if (terms && !terms.checked) isValid = false;
             }
-
             return isValid;
+        }
+
+        async function mountPaymentElement() {
+            if (paymentElementMounted) return;
+            await loadStripeConfig();
+            if (!stripe) {
+                if (paymentElementError) {
+                    paymentElementError.textContent = '決済システムの読み込みに失敗しました。ページを再読み込みしてください。';
+                    paymentElementError.style.display = 'block';
+                }
+                return;
+            }
+            elements = stripe.elements({
+                mode: 'setup',
+                currency: 'jpy',
+                paymentMethodTypes: ['card'],
+                appearance: { theme: 'stripe', variables: { fontFamily: 'system-ui, -apple-system, sans-serif' } },
+            });
+            const payment = elements.create('payment', { layout: 'tabs' });
+            payment.mount('#payment-element');
+            paymentElementMounted = true;
         }
 
         applicationForm?.addEventListener('submit', (e) => {
             e.preventDefault();
-
-            if (validateModalForm(applicationForm)) {
-                if (submitBtn) {
-                    submitBtn.classList.add('loading');
-                    submitBtn.disabled = true;
-                }
-
-                window.setTimeout(() => {
-                    if (submitBtn) {
-                        submitBtn.classList.remove('loading');
-                        submitBtn.disabled = false;
-                    }
-                    if (smsOptionStep2) {
-                        smsOptionStep2.checked = false;
-                    }
-                    applicationFormStep2?.reset();
-                    updatePlanOptionSummary();
-                    if (modalFormArea) modalFormArea.style.display = 'none';
-                    if (modalFormAreaStep2) modalFormAreaStep2.style.display = 'block';
-                }, 3000);
-            }
+            if (!validateModalForm(applicationForm)) return;
+            if (submitBtn) { submitBtn.classList.add('loading'); submitBtn.disabled = true; }
+            // Switch to step 2 and mount Payment Element
+            if (smsOptionStep2) smsOptionStep2.checked = false;
+            applicationFormStep2?.reset();
+            updatePlanSummaryCard();
+            if (modalFormArea) modalFormArea.style.display = 'none';
+            if (modalFormAreaStep2) modalFormAreaStep2.style.display = 'block';
+            mountPaymentElement().finally(() => {
+                if (submitBtn) { submitBtn.classList.remove('loading'); submitBtn.disabled = false; }
+            });
         });
 
-        applicationFormStep2?.addEventListener('submit', (e) => {
+        applicationFormStep2?.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!validateModalForm(applicationFormStep2, 'termsStep2')) return;
+            if (!stripe || !elements) {
+                if (paymentElementError) {
+                    paymentElementError.textContent = '決済システムが準備できていません。少し待ってからもう一度お試しください。';
+                    paymentElementError.style.display = 'block';
+                }
+                return;
+            }
+            if (paymentElementError) {
+                paymentElementError.style.display = 'none';
+                paymentElementError.textContent = '';
+            }
+            if (submitBtnStep2) { submitBtnStep2.classList.add('loading'); submitBtnStep2.disabled = true; }
 
-            if (validateModalForm(applicationFormStep2, 'termsStep2')) {
-                if (modalFormAreaStep2) modalFormAreaStep2.style.display = 'none';
-                if (successMessage) successMessage.style.display = 'block';
+            const showErr = (msg) => {
+                if (paymentElementError) {
+                    paymentElementError.textContent = msg;
+                    paymentElementError.style.display = 'block';
+                }
+                if (submitBtnStep2) { submitBtnStep2.classList.remove('loading'); submitBtnStep2.disabled = false; }
+            };
+
+            try {
+                const { error: submitError } = await elements.submit();
+                if (submitError) {
+                    showErr(submitError.message || '入力内容に誤りがあります。');
+                    return;
+                }
+
+                const name = document.getElementById('name')?.value || '';
+                const email = document.getElementById('email')?.value || '';
+                const withSms = Boolean(smsOptionStep2?.checked);
+
+                const resp = await fetch('/api/checkout', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ plan: selectedPlan, with_sms: withSms, email, name }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.client_secret) {
+                    showErr(data.error || '申込処理でエラーが発生しました。時間をおいて再度お試しください。');
+                    return;
+                }
+
+                const { error: confirmError } = await stripe.confirmSetup({
+                    elements,
+                    clientSecret: data.client_secret,
+                    confirmParams: {
+                        return_url: window.location.origin + '/thankyou',
+                        payment_method_data: {
+                            billing_details: { name, email },
+                        },
+                    },
+                });
+                if (confirmError) {
+                    showErr(confirmError.message || '決済の確定に失敗しました。');
+                    return;
+                }
+            } catch (err) {
+                showErr(err && err.message ? err.message : '通信エラーが発生しました。');
             }
         });
 

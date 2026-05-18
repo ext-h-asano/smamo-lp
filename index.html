@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <script src="https://cdn.lordicon.com/lordicon.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
@@ -783,7 +784,7 @@
                             <li><img src="img/check.svg" alt="" class="price-card__check" aria-hidden="true">月額プランより年 <span class="price-card__amount">¥6,556</span> お得</li>
                             <li><img src="img/check.svg" alt="" class="price-card__check" aria-hidden="true">いつでも解約可(残月分日割り返金)</li>
                         </ul>
-                        <a href="#contact" class="price-card__cta">年払いプランで申込む</a>
+                        <a href="#contact" class="price-card__cta" data-plan="yearly">年払いプランで申込む</a>
                     </article>
 
                     <article class="price-card price-card--featured">
@@ -823,7 +824,7 @@
                             <li><img src="img/check.svg" alt="" class="price-card__check" aria-hidden="true">いつでも解約可・解約手数料 <span class="price-card__amount">¥0</span></li>
                             <li><img src="img/check.svg" alt="" class="price-card__check" aria-hidden="true">毎月の負担を最小に</li>
                         </ul>
-                        <a href="#contact" class="price-card__cta price-card__cta--featured">月額プランで申込む</a>
+                        <a href="#contact" class="price-card__cta price-card__cta--featured" data-plan="monthly">月額プランで申込む</a>
                     </article>
 
                     <article class="price-card">
@@ -867,7 +868,7 @@
                             <li><img src="img/check.svg" alt="" class="price-card__check" aria-hidden="true">全機能を制限なく利用可</li>
                             <li class="price-card__note">※2年間のご利用が必要(期間内解約は別途手数料)</li>
                         </ul>
-                        <a href="#contact" class="price-card__cta">2年契約プランで申込む</a>
+                        <a href="#contact" class="price-card__cta" data-plan="two_year">2年契約プランで申込む</a>
                     </article>
                 </div>
 
@@ -1374,11 +1375,11 @@
                     <div class="plan-summary-card__top">
                         <div>
                             <p class="plan-summary-card__label">選択中のプラン</p>
-                            <h3 class="plan-summary-card__title">スマモ 月額プラン</h3>
+                            <h3 class="plan-summary-card__title" id="planSummaryTitle">スマモ 月額プラン</h3>
                         </div>
                         <div class="plan-summary-card__price-wrap">
-                            <strong class="plan-summary-card__price">¥980</strong>
-                            <span class="plan-summary-card__unit">/月</span>
+                            <strong class="plan-summary-card__price" id="planSummaryPrice">¥3,278</strong>
+                            <span class="plan-summary-card__unit" id="planSummaryUnit">/月</span>
                         </div>
                     </div>
                     <div class="plan-summary-card__divider"></div>
@@ -1387,13 +1388,18 @@
                         <strong class="is-free">¥0</strong>
                     </div>
                     <div class="plan-summary-card__row plan-summary-card__row--subtle">
-                        <span>2026年5月17日 以降</span>
-                        <span>¥980/月（自動更新）</span>
+                        <span id="planSummaryRenewLabel">3日後の自動更新</span>
+                        <span id="planSummaryRenewAmount">¥3,278/月（自動更新）</span>
                     </div>
                     <div class="plan-summary-card__divider plan-summary-card__divider--option" id="planOptionDivider" style="display: none;"></div>
                     <div class="plan-summary-card__row plan-summary-card__row--option" id="planOptionRow" style="display: none;">
                         <span>+ SMS受信オプション</span>
-                        <span>¥500/月</span>
+                        <span>¥550/月</span>
+                    </div>
+                    <div class="plan-summary-card__divider"></div>
+                    <div class="plan-summary-card__row" id="planInitialFeeRow">
+                        <span>初期費用（3日後の請求に同梱）</span>
+                        <strong id="planInitialFeeAmount">¥33,000</strong>
                     </div>
                 </div>
 
@@ -1413,31 +1419,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="cardNumber">カード番号 <span class="required-badge">必須</span></label>
-                        <div class="payment-input-wrap">
-                            <input type="text" id="cardNumber" name="cardNumber" placeholder="1234 5678 9012 3456" required>
-                            <i class="fa-regular fa-credit-card payment-input-icon" aria-hidden="true"></i>
-                        </div>
-                        <p class="error-text">入力内容に誤りがあります。</p>
-                    </div>
-
-                    <div class="payment-form-row">
-                        <div class="form-group form-group--half">
-                            <label for="cardExpiry">有効期限 <span class="required-badge">必須</span></label>
-                            <input type="text" id="cardExpiry" name="cardExpiry" placeholder="MM / YY" required>
-                            <p class="error-text">入力内容に誤りがあります。</p>
-                        </div>
-                        <div class="form-group form-group--half">
-                            <label for="cardCvc">セキュリティコード <span class="required-badge">必須</span></label>
-                            <input type="text" id="cardCvc" name="cardCvc" placeholder="CVC" required>
-                            <p class="error-text">入力内容に誤りがあります。</p>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="cardName">カード名義 <span class="required-badge">必須</span></label>
-                        <input type="text" id="cardName" name="cardName" placeholder="TARO YAMADA" required>
-                        <p class="error-text">入力内容に誤りがあります。</p>
+                        <div id="payment-element"></div>
+                        <p class="error-text" id="payment-element-error" style="display:none;"></p>
                     </div>
                     <div class="payment-confirm-card" aria-label="無料体験の確認事項">
                         <div class="payment-confirm-card__item">
