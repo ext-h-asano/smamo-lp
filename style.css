@@ -759,7 +759,7 @@ img {
     left: 0;
     width: 100%;
     height: 100%;
-    background-image: url('img/fv_background.jpg');
+    background-image: url('img/fv_background.webp');
     /* PC版の背景 */
     background-size: cover;
     background-position: center;
@@ -1350,7 +1350,7 @@ img {
 /* Product Introduction Section (Faithful 2-column layout) */
 .intro-section {
     padding: 160px 0;
-    background-image: url('img/body-bg.jpg');
+    background-image: url('img/body-bg.webp');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -1686,7 +1686,7 @@ img {
 /* Features Section */
 .features-section {
     padding: 100px 0;
-    background-image: url('img/body-bg.jpg');
+    background-image: url('img/body-bg.webp');
     background-size: cover;
     background-attachment: fixed;
     color: #FFFFFF;
@@ -1696,7 +1696,7 @@ img {
     .features-section {
         padding: 64px 0;
         background-attachment: scroll !important;
-        background-image: url('img/body-bg_sp.jpg');
+        background-image: url('img/body-bg_sp.webp');
         /* スマホ専用背景：特徴セクション */
         background-repeat: repeat;
         background-size: 100% auto;
@@ -2048,7 +2048,7 @@ img {
 /* Price Section */
 .price-section {
     padding: 100px 0;
-    background-image: url('img/body-bg.jpg');
+    background-image: url('img/body-bg.webp');
     background-size: cover;
     background-attachment: fixed;
     color: #FFFFFF;
@@ -2919,7 +2919,7 @@ img {
 /* Final CTA Section */
 .final-cta-section {
     padding: 60px 0px 30px;
-    background-image: url('img/fv_background.jpg');
+    background-image: url('img/fv_background.webp');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -2936,7 +2936,7 @@ img {
 @media (max-width: 767px) {
     .final-cta-section {
         background-attachment: scroll !important;
-        background-image: url('img/fv_background_sp.jpg');
+        background-image: url('img/fv_background_sp.webp');
         /* スマホ専用背景 */
         background-position: center bottom;
     }
@@ -3845,7 +3845,7 @@ img {
 
     /* Responsive Image Swap (PC -> SP) */
     .hero-bg {
-        background-image: url('img/fv_background_sp.jpg');
+        background-image: url('img/fv_background_sp.webp');
         /* スマホ専用背景 */
         background-attachment: scroll !important;
         /* iPhone等の実機対策: 固定を解除 */
@@ -3853,52 +3853,52 @@ img {
     }
 
     .logo-img {
-        content: url('img/header-logo_sp.png');
+        content: url('img/header-logo_sp.webp');
         /* スマホ専用ヘッダーロゴ */
         height: 32px;
         width: auto;
     }
 
     .header-cta-img {
-        content: url('img/header-btn_sp.png');
+        content: url('img/header-btn_sp.webp');
         /* スマホ専用ヘッダーボタン */
         height: 36px;
         width: auto;
     }
 
     .cta-img-main {
-        content: url('img/cta-btn_sp.png');
+        content: url('img/cta-btn_sp.webp');
         /* スマホ専用CTAボタン */
     }
 
     .mein-text-img {
-        content: url('img/mein-text_sp.png');
+        content: url('img/mein-text_sp.webp');
         /* スマホ専用メインキャッチ */
     }
 
     .sub-text-img {
-        content: url('img/sub-text_sp.png');
+        content: url('img/sub-text_sp.webp');
         /* スマホ専用サブキャッチ */
     }
 
     #caseImg1 {
-        content: url('img/case_1_sp.png');
+        content: url('img/case_1_sp.webp');
     }
 
     #caseImg2 {
-        content: url('img/case_2_sp.png');
+        content: url('img/case_2_sp.webp');
     }
 
     #caseImg3 {
-        content: url('img/case_3_sp.png');
+        content: url('img/case_3_sp.webp');
     }
 
     #caseImg4 {
-        content: url('img/case_4_sp.png');
+        content: url('img/case_4_sp.webp');
     }
 
     #caseImg5 {
-        content: url('img/case_5_sp.png');
+        content: url('img/case_5_sp.webp');
     }
 
     .cta-inner {
@@ -4000,7 +4000,7 @@ img {
     .price-section {
         padding: 64px 0;
         background-attachment: scroll !important;
-        background-image: url('img/body-bg_sp.jpg');
+        background-image: url('img/body-bg_sp.webp');
         background-repeat: repeat;
         background-size: 100% auto;
     }
