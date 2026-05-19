@@ -8,6 +8,46 @@ export interface AuthUser {
   email: string;
 }
 
+/**
+ * Validate a Supabase user JWT by asking the auth server. Returns the user
+ * record on success, or null on any failure (expired/invalid/missing).
+ */
+export async function getUserFromJwt(
+  cfg: SupabaseAdminConfig,
+  jwt: string,
+): Promise<AuthUser | null> {
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}/auth/v1/user`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${jwt}`,
+    },
+  });
+  if (!resp.ok) return null;
+  const body = (await resp.json()) as AuthUser | null;
+  return body && body.id ? body : null;
+}
+
+/**
+ * Look up the most recent stripe_customer_id stored for this user.
+ */
+export async function getCustomerIdForUser(
+  cfg: SupabaseAdminConfig,
+  userId: string,
+): Promise<string | null> {
+  const path =
+    `/rest/v1/stripe_subscriptions?user_id=eq.${userId}` +
+    `&select=stripe_customer_id&order=created_at.desc&limit=1`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) return null;
+  const rows = (await resp.json()) as { stripe_customer_id?: string }[];
+  return rows[0]?.stripe_customer_id ?? null;
+}
+
 interface SupabaseError {
   msg?: string;
   message?: string;
