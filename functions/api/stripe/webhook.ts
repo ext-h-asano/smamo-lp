@@ -1,6 +1,10 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../../_lib/stripe";
-import { StripeSubscriptionRow, upsertSubscription } from "../../_lib/supabase";
+import {
+  StripeSubscriptionRow,
+  updateUserContractStatus,
+  upsertSubscription,
+} from "../../_lib/supabase";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
 
@@ -143,11 +147,30 @@ async function syncSubscription(
     cancellation_fee_amount: extras.cancellationFee ?? null,
     raw_metadata: sub.metadata ?? {},
   };
-  await upsertSubscription(
-    { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY },
-    row,
-  );
+  const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
+  await upsertSubscription(cfg, row);
   console.log(`[stripe] upserted stripe_subscriptions sub=${sub.id} status=${sub.status}`);
+
+  await updateUserContractStatus(cfg, userId, mapToContractStatus(sub.status));
+}
+
+function mapToContractStatus(
+  stripeStatus: Stripe.Subscription.Status,
+): "active" | "cancelled" {
+  switch (stripeStatus) {
+    case "active":
+    case "trialing":
+    case "past_due":
+      return "active";
+    case "canceled":
+    case "unpaid":
+    case "incomplete":
+    case "incomplete_expired":
+    case "paused":
+      return "cancelled";
+    default:
+      return "cancelled";
+  }
 }
 
 function tsToIso(ts: number | null | undefined): string | null {

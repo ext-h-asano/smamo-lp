@@ -158,6 +158,35 @@ export interface StripeSubscriptionRow {
 }
 
 /**
+ * Update public.users.contract_status for the given Supabase user.
+ * Used after Stripe subscription state changes to keep the legacy column
+ * in sync with the Stripe-derived truth.
+ */
+export async function updateUserContractStatus(
+  cfg: SupabaseAdminConfig,
+  userId: string,
+  contractStatus: "active" | "cancelled",
+): Promise<void> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/rest/v1/users?id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: cfg.serviceRoleKey,
+        Authorization: `Bearer ${cfg.serviceRoleKey}`,
+        "content-type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ contract_status: contractStatus }),
+    },
+  );
+  if (resp.status < 200 || resp.status >= 300) {
+    const body = await resp.text();
+    throw new Error(`supabase users.contract_status update failed (${resp.status}): ${body}`);
+  }
+}
+
+/**
  * Upsert a row into public.stripe_subscriptions keyed on stripe_subscription_id.
  */
 export async function upsertSubscription(
