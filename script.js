@@ -448,14 +448,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ?email=xxx で来た場合（例: アプリ「再契約」導線）にフォームへ prefill +
-    // 料金プランセクションまで自動スクロール
+    // 料金プランセクションまで自動スクロール。
+    // ?mode=add_device&device_name=foo の場合は「追加デバイス申込」モードとして
+    // 見出しを切り替え、メアドは編集不可、device_name を /api/checkout に伝搬。
     const urlParams = new URLSearchParams(window.location.search);
     const prefillEmail = urlParams.get('email') || '';
+    const isAddDeviceMode = urlParams.get('mode') === 'add_device';
+    const prefillDeviceName = urlParams.get('device_name') || '';
+
     if (prefillEmail) {
         window.setTimeout(() => {
             const priceSection = document.getElementById('price-section');
             if (priceSection) priceSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 500);
+    }
+
+    if (isAddDeviceMode) {
+        const modalTitle = document.querySelector('.modal-title');
+        const modalSubtitle = document.querySelector('.modal-subtitle');
+        if (modalTitle) modalTitle.textContent = '追加デバイスのお申込み';
+        if (modalSubtitle) modalSubtitle.textContent = '新しいデバイスのプランをお選びください';
+
+        const emailEl = document.getElementById('email');
+        if (emailEl && prefillEmail) {
+            emailEl.value = prefillEmail;
+            emailEl.readOnly = true;
+            emailEl.style.opacity = '0.6';
+        }
+        const passwordGroup = document.getElementById('password')?.closest('.form-group');
+        const passwordLabel = passwordGroup?.querySelector('label');
+        if (passwordLabel) {
+            passwordLabel.firstChild.textContent = '既存アカウントのパスワード ';
+        }
     }
 
     if (modal) {
@@ -618,7 +642,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const resp = await fetch('/api/checkout', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ plan: selectedPlan, with_sms: withSms, email, name, password }),
+                    body: JSON.stringify({
+                        plan: selectedPlan,
+                        with_sms: withSms,
+                        email,
+                        name,
+                        password,
+                        device_name: prefillDeviceName || null,
+                        mode: isAddDeviceMode ? 'add_device' : 'signup',
+                    }),
                 });
                 const data = await resp.json();
                 if (!resp.ok || !data.client_secret) {

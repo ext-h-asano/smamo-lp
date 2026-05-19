@@ -9,6 +9,8 @@ interface CheckoutRequest {
   email: string;
   name?: string;
   password: string;
+  device_name?: string | null;
+  mode?: "signup" | "add_device";
 }
 
 function isPlanKey(v: unknown): v is PlanKey {
@@ -76,7 +78,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     plan_key: body.plan,
     with_sms: String(body.with_sms),
     supabase_user_id: supabaseUser.id,
+    flow_mode: body.mode === "add_device" ? "add_device" : "signup",
   };
+  if (body.device_name && body.device_name.trim() !== "") {
+    metadata.device_name = body.device_name.trim();
+  }
   if (plan.commitMonths) {
     const committedUntil = new Date();
     committedUntil.setMonth(committedUntil.getMonth() + plan.commitMonths);
