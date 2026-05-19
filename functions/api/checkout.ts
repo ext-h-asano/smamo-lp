@@ -50,13 +50,24 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const plan = plans[body.plan];
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
-  const customer = existing.data[0]
-    ? existing.data[0]
-    : await stripe.customers.create({
-        email: body.email,
-        name: body.name,
-        metadata: { source: "smamo-lp", supabase_user_id: supabaseUser.id },
+  let customer: Stripe.Customer;
+  if (existing.data[0]) {
+    customer = existing.data[0];
+    // 既存 Customer に preferred_locales が無ければ日本語に設定し直す
+    // (Stripe からの自動メールを日本語版で送らせるため)
+    if (!customer.preferred_locales?.length) {
+      customer = await stripe.customers.update(customer.id, {
+        preferred_locales: ["ja"],
       });
+    }
+  } else {
+    customer = await stripe.customers.create({
+      email: body.email,
+      name: body.name,
+      preferred_locales: ["ja"],
+      metadata: { source: "smamo-lp", supabase_user_id: supabaseUser.id },
+    });
+  }
 
   const items: Stripe.SubscriptionCreateParams.Item[] = [{ price: plan.priceId }];
   if (body.with_sms) items.push({ price: env.STRIPE_PRICE_SMS_OPTION });
