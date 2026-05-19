@@ -158,6 +158,41 @@ export interface StripeSubscriptionRow {
 }
 
 /**
+ * Recompute users.contract_status from the union of all subscriptions for
+ * this user. Any active/trialing/past_due subscription keeps the account
+ * active. Returns the resulting status ('active' | 'cancelled') so the
+ * caller can log it.
+ *
+ * Used by the Stripe webhook after each subscription event upsert: the
+ * legacy single contract_status column has to reflect the aggregate across
+ * multiple subscriptions (per-device pricing model).
+ */
+export async function recomputeContractStatus(
+  cfg: SupabaseAdminConfig,
+  userId: string,
+): Promise<"active" | "cancelled"> {
+  const path =
+    `/rest/v1/stripe_subscriptions?user_id=eq.${userId}&select=status`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`stripe_subscriptions list failed (${resp.status}): ${body}`);
+  }
+  const rows = (await resp.json()) as { status: string }[];
+  const liveStatuses = new Set(["active", "trialing", "past_due"]);
+  const anyActive = rows.some((r) => liveStatuses.has(r.status));
+  // No subscription at all? Treat as cancelled (no entitlement).
+  const next: "active" | "cancelled" = anyActive ? "active" : "cancelled";
+  await updateUserContractStatus(cfg, userId, next);
+  return next;
+}
+
+/**
  * Update public.users.contract_status for the given Supabase user.
  * Used after Stripe subscription state changes to keep the legacy column
  * in sync with the Stripe-derived truth.

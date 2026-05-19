@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../../_lib/stripe";
 import {
   StripeSubscriptionRow,
-  updateUserContractStatus,
+  recomputeContractStatus,
   upsertSubscription,
 } from "../../_lib/supabase";
 
@@ -151,26 +151,11 @@ async function syncSubscription(
   await upsertSubscription(cfg, row);
   console.log(`[stripe] upserted stripe_subscriptions sub=${sub.id} status=${sub.status}`);
 
-  await updateUserContractStatus(cfg, userId, mapToContractStatus(sub.status));
-}
-
-function mapToContractStatus(
-  stripeStatus: Stripe.Subscription.Status,
-): "active" | "cancelled" {
-  switch (stripeStatus) {
-    case "active":
-    case "trialing":
-    case "past_due":
-      return "active";
-    case "canceled":
-    case "unpaid":
-    case "incomplete":
-    case "incomplete_expired":
-    case "paused":
-      return "cancelled";
-    default:
-      return "cancelled";
-  }
+  // 集計: 当該ユーザーの全 subscription を再評価して contract_status を決める。
+  // 1 ユーザー = 複数 subscription (デバイス毎課金) のため、個別 event だけ見て
+  // 上書きすると他の active 契約があっても 'cancelled' に倒してしまう。
+  const aggregate = await recomputeContractStatus(cfg, userId);
+  console.log(`[stripe] users.contract_status user=${userId} -> ${aggregate}`);
 }
 
 function tsToIso(ts: number | null | undefined): string | null {
