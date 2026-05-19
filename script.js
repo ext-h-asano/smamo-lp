@@ -593,12 +593,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const name = document.getElementById('name')?.value || '';
                 const email = document.getElementById('email')?.value || '';
+                const password = document.getElementById('password')?.value || '';
                 const withSms = Boolean(smsOptionStep2?.checked);
 
                 const resp = await fetch('/api/checkout', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ plan: selectedPlan, with_sms: withSms, email, name }),
+                    body: JSON.stringify({ plan: selectedPlan, with_sms: withSms, email, name, password }),
                 });
                 const data = await resp.json();
                 if (!resp.ok || !data.client_secret) {

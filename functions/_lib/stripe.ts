@@ -16,8 +16,8 @@ export interface Env {
   STRIPE_PRICE_TWO_YEAR: string;
   STRIPE_PRICE_SMS_OPTION: string;
   STRIPE_PRODUCT_INITIAL_FEE: string;
-  PROVISION_URL?: string;
-  PROVISION_SHARED_SECRET?: string;
+  SUPABASE_URL: string;
+  SUPABASE_SECRET_KEY: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {
