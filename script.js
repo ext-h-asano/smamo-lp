@@ -553,6 +553,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (smsOptionStep2) smsOptionStep2.checked = false;
             applicationFormStep2?.reset();
             updatePlanSummaryCard();
+            const emailEl = document.getElementById('email');
+            const accountSuccessEmail = document.getElementById('accountSuccessEmail');
+            if (accountSuccessEmail) accountSuccessEmail.textContent = `(${emailEl?.value || ''})`;
             if (modalFormArea) modalFormArea.style.display = 'none';
             if (modalFormAreaStep2) modalFormAreaStep2.style.display = 'block';
             mountPaymentElement().finally(() => {
