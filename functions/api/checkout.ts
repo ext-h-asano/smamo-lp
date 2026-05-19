@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
-import { getPlans, INITIAL_FEE_JPY, PlanKey, TRIAL_DAYS } from "../_lib/plans";
+import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
 import { ensureUserExists } from "../_lib/supabase";
 
 interface CheckoutRequest {
@@ -90,6 +90,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     metadata.committed_until = committedUntil.toISOString();
   }
 
+  const deviceLabel = body.device_name?.trim()
+    ? `${body.device_name.trim()} (${PLAN_DISPLAY_NAME[body.plan]})`
+    : PLAN_DISPLAY_NAME[body.plan];
+
   const subscription = await stripe.subscriptions.create({
     customer: customer.id,
     items,
@@ -101,6 +105,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     },
     expand: ["pending_setup_intent"],
     metadata,
+    description: deviceLabel,
   });
 
   if (plan.hasInitialFee) {

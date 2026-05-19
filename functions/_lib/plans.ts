@@ -14,5 +14,11 @@ export function getPlans(env: { STRIPE_PRICE_MONTHLY: string; STRIPE_PRICE_YEARL
   };
 }
 
+export const PLAN_DISPLAY_NAME: Record<PlanKey, string> = {
+  monthly: "SMAMO 月額プラン",
+  yearly: "SMAMO 年払いプラン",
+  two_year: "SMAMO 2年プラン",
+};
+
 export const INITIAL_FEE_JPY = 33000;
 export const TRIAL_DAYS = 3;
