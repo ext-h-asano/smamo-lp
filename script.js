@@ -447,6 +447,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (planOptionRow) planOptionRow.style.display = isChecked ? 'flex' : 'none';
     }
 
+    // ?email=xxx で来た場合（例: アプリ「再契約」導線）にフォームへ prefill +
+    // 料金プランセクションまで自動スクロール
+    const urlParams = new URLSearchParams(window.location.search);
+    const prefillEmail = urlParams.get('email') || '';
+    if (prefillEmail) {
+        window.setTimeout(() => {
+            const priceSection = document.getElementById('price-section');
+            if (priceSection) priceSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 500);
+    }
+
     if (modal) {
         function openModal() {
             if (resetModalTimer) {
@@ -456,6 +467,11 @@ document.addEventListener('DOMContentLoaded', () => {
             updatePlanSummaryCard();
             modal.classList.add('is-active');
             document.body.style.overflow = 'hidden';
+            // prefill: URL 由来のメールがあれば、毎回モーダルを開くたびに上書き反映
+            if (prefillEmail) {
+                const emailEl = document.getElementById('email');
+                if (emailEl && !emailEl.value) emailEl.value = prefillEmail;
+            }
             loadStripeConfig();
         }
 
