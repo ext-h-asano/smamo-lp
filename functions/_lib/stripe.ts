@@ -18,6 +18,8 @@ export interface Env {
   STRIPE_PRODUCT_INITIAL_FEE: string;
   SUPABASE_URL: string;
   SUPABASE_SECRET_KEY: string;
+  /** Resend API key for transactional emails. 未設定なら welcome メールは飛ばさない (warn ログのみ) */
+  RESEND_API_KEY?: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {

@@ -1,5 +1,8 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../../_lib/stripe";
+import { sendEmail } from "../../_lib/email";
+import { welcomeEmail } from "../../_lib/email_templates";
+import { INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey } from "../../_lib/plans";
 import {
   StripeSubscriptionRow,
   recomputeContractStatus,
@@ -7,6 +10,17 @@ import {
 } from "../../_lib/supabase";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
+const SMS_OPTION_FEE_JPY = 550;
+const PLAN_AMOUNTS_JPY: Record<PlanKey, number> = {
+  monthly: 3278,
+  yearly: 32780,
+  two_year: 5478,
+};
+const PLAN_HAS_INITIAL_FEE: Record<PlanKey, boolean> = {
+  monthly: true,
+  yearly: true,
+  two_year: false,
+};
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -28,6 +42,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case "customer.subscription.created":
       case "customer.subscription.updated":
         await syncSubscription(stripe, env, (event.data.object as Stripe.Subscription).id);
+        break;
+
+      case "setup_intent.succeeded":
+        await onSetupIntentSucceeded(stripe, env, event.data.object as Stripe.SetupIntent);
         break;
 
       case "customer.subscription.deleted":
@@ -56,6 +74,63 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   return jsonResponse({ received: true });
 };
+
+async function onSetupIntentSucceeded(
+  stripe: Stripe,
+  env: Env,
+  si: Stripe.SetupIntent,
+): Promise<void> {
+  // SetupIntent succeeded はカード登録完了 (trial 開始) のタイミング。
+  // ここで Welcome メール 1 通を送る。重複送信は Resend の Idempotency-Key
+  // (setup_intent.id) で防ぐ。
+  if (!si.customer) {
+    console.log(`[email] setup_intent.succeeded but no customer attached si=${si.id}`);
+    return;
+  }
+  const customerId = typeof si.customer === "string" ? si.customer : si.customer.id;
+  const customer = await stripe.customers.retrieve(customerId);
+  if (customer.deleted) return;
+  const email = (customer as Stripe.Customer).email;
+  if (!email) {
+    console.log(`[email] customer ${customerId} has no email; skip welcome`);
+    return;
+  }
+  const name = (customer as Stripe.Customer).name;
+
+  // 直近で作られた当該 customer のサブスクから plan / sms を引く。
+  const subs = await stripe.subscriptions.list({ customer: customerId, limit: 5 });
+  const sub = subs.data.find((s) => s.status === "trialing" || s.status === "active") ?? subs.data[0];
+  const planKey = (sub?.metadata?.plan_key as PlanKey | undefined) ?? "monthly";
+  const withSms = sub?.metadata?.with_sms === "true";
+
+  const planAmount = PLAN_AMOUNTS_JPY[planKey] ?? PLAN_AMOUNTS_JPY.monthly;
+  const initFee = PLAN_HAS_INITIAL_FEE[planKey] ? INITIAL_FEE_JPY : 0;
+  const smsFee = withSms ? SMS_OPTION_FEE_JPY : 0;
+  const firstChargeAmount = planAmount + initFee + smsFee;
+
+  const planLabel =
+    PLAN_DISPLAY_NAME[planKey] + (withSms ? " + SMS オプション" : "");
+
+  const trialEndIso = sub?.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+  const trialEndDate = trialEndIso
+    ? trialEndIso.slice(0, 10)
+    : new Date(Date.now() + 3 * 86400 * 1000).toISOString().slice(0, 10);
+
+  const tmpl = welcomeEmail({
+    name,
+    email,
+    planLabel,
+    trialEndDate,
+    firstChargeAmount,
+  });
+  await sendEmail(env.RESEND_API_KEY, {
+    to: email,
+    subject: tmpl.subject,
+    html: tmpl.html,
+    text: tmpl.text,
+    idempotencyKey: `welcome:${si.id}`,
+  });
+}
 
 async function onInvoicePaid(stripe: Stripe, env: Env, invoice: Stripe.Invoice): Promise<void> {
   console.log(
