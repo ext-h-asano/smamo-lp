@@ -65,7 +65,7 @@ function extractErrorMessage(body: unknown): string {
   return String(body);
 }
 
-async function adminFetch<T>(
+export async function adminFetch<T>(
   cfg: SupabaseAdminConfig,
   path: string,
   init: RequestInit & { json?: unknown } = {},

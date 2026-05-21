@@ -1,5 +1,6 @@
 import type { Env } from "./stripe";
 import { sendDiscord } from "./discord";
+import { adminFetch } from "./supabase";
 
 interface AutoAssignResult {
   container_name: string | null;
@@ -33,19 +34,15 @@ interface AutoAssignArgs {
 export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
   const { env, subscriptionId, customerEmail, planKey, deviceName, setupIntentId } = args;
 
-  const rpcUrl = `${env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/auto_assign_pool_container`;
+  const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
 
-  let resp: Response;
+  let rpcResp: { status: number; body: unknown };
   try {
-    resp = await fetch(rpcUrl, {
-      method: "POST",
-      headers: {
-        apikey: env.SUPABASE_SECRET_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ p_subscription_id: subscriptionId }),
-    });
+    rpcResp = await adminFetch<unknown>(
+      cfg,
+      "/rest/v1/rpc/auto_assign_pool_container",
+      { method: "POST", json: { p_subscription_id: subscriptionId } },
+    );
   } catch (e) {
     console.error("[auto-provision] rpc fetch failed", e);
     await sendDiscord(env, "critical", {
@@ -60,16 +57,18 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
     return;
   }
 
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "<no body>");
-    console.error(`[auto-provision] rpc ${resp.status}: ${body}`);
+  if (rpcResp.status < 200 || rpcResp.status >= 300) {
+    const bodyStr = typeof rpcResp.body === "string"
+      ? rpcResp.body
+      : JSON.stringify(rpcResp.body);
+    console.error(`[auto-provision] rpc ${rpcResp.status}: ${bodyStr}`);
     await sendDiscord(env, "critical", {
       title: "🚨 自動割当 RPC エラー",
       fields: [
         { name: "subscription_id", value: subscriptionId },
         { name: "setup_intent_id", value: setupIntentId },
-        { name: "status", value: String(resp.status) },
-        { name: "body", value: body.slice(0, 500) },
+        { name: "status", value: String(rpcResp.status) },
+        { name: "body", value: bodyStr.slice(0, 500) },
         { name: "action", value: "手動 /assign-user で復旧してください" },
       ],
     });
@@ -77,27 +76,21 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
   }
 
   // Postgres function は TABLE を返す → REST RPC では配列で返る
-  const rows = (await resp.json().catch(() => [])) as AutoAssignResult[];
+  const rows = (Array.isArray(rpcResp.body) ? rpcResp.body : []) as AutoAssignResult[];
   const data = rows[0];
 
-  if (!data || data.container_name === null) {
+  if (!data || data.container_name == null) {
     // function が row を返さなかった、または container_name が NULL。
     // subscription 未登録 / プール枯渇のどちらか判定するため stripe_subscriptions を独立クエリ。
-    const subUrl =
-      `${env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1/stripe_subscriptions` +
-      `?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}` +
-      `&select=user_id&limit=1`;
     let subExists = false;
     try {
-      const subResp = await fetch(subUrl, {
-        headers: {
-          apikey: env.SUPABASE_SECRET_KEY,
-          Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
-        },
-      });
-      if (subResp.ok) {
-        const subRows = (await subResp.json()) as { user_id?: string }[];
-        subExists = !!subRows[0]?.user_id;
+      const subResp = await adminFetch<{ user_id?: string }[]>(
+        cfg,
+        `/rest/v1/stripe_subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}&select=user_id&limit=1`,
+        { method: "GET" },
+      );
+      if (subResp.status >= 200 && subResp.status < 300 && Array.isArray(subResp.body)) {
+        subExists = !!subResp.body[0]?.user_id;
       }
     } catch (e) {
       console.error("[auto-provision] stripe_subscriptions lookup failed", e);
