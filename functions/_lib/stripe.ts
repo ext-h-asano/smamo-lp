@@ -20,6 +20,10 @@ export interface Env {
   SUPABASE_SECRET_KEY: string;
   /** Resend API key for transactional emails. 未設定なら welcome メールは飛ばさない (warn ログのみ) */
   RESEND_API_KEY?: string;
+  /** Discord webhook URL (provisioning 結果通知用)。未設定なら通知を skip するだけ */
+  DISCORD_WEBHOOK_URL?: string;
+  /** 割当成功後のプール残量がこの値以下なら warn 通知。数値文字列。デフォルト "3" */
+  POOL_WARN_THRESHOLD?: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {
