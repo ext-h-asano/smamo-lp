@@ -8,6 +8,7 @@ import {
   recomputeContractStatus,
   upsertSubscription,
 } from "../../_lib/supabase";
+import { autoAssignContainer } from "../../_lib/auto_provisioning";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
 const SMS_OPTION_FEE_JPY = 550;
@@ -130,6 +131,24 @@ async function onSetupIntentSucceeded(
     text: tmpl.text,
     idempotencyKey: `welcome:${si.id}`,
   });
+
+  // ---- コンテナ自動割当 (welcome メール送信後) ----
+  // sub は既に上で stripe.subscriptions.list から取得済。
+  // sub が無い (= subscription 未確定) なら割当もできないので skip
+  if (sub) {
+    await autoAssignContainer({
+      env,
+      subscriptionId: sub.id,
+      customerEmail: email,
+      planKey,
+      deviceName: (sub.metadata?.device_name as string | undefined) ?? null,
+      setupIntentId: si.id,
+    });
+  } else {
+    console.warn(
+      `[auto-provision] no subscription found for customer=${customerId} si=${si.id}, skip`,
+    );
+  }
 }
 
 async function onInvoicePaid(stripe: Stripe, env: Env, invoice: Stripe.Invoice): Promise<void> {
