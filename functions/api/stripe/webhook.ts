@@ -41,9 +41,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     switch (event.type) {
       case "customer.subscription.created":
-      case "customer.subscription.updated":
-        await syncSubscription(stripe, env, (event.data.object as Stripe.Subscription).id);
+      case "customer.subscription.updated": {
+        const subEvent = event.data.object as Stripe.Subscription;
+        await syncSubscription(stripe, env, subEvent.id);
+        // setup_intent.succeeded 側の autoAssign が race で reason='not_found'
+        // に倒れていた場合の救済。RPC は冪等 (advisory lock + reason='already')
+        // なので二重呼出 OK。
+        if (event.type === "customer.subscription.created") {
+          const customerId =
+            typeof subEvent.customer === "string"
+              ? subEvent.customer
+              : subEvent.customer.id;
+          let email: string | null = null;
+          try {
+            const customer = await stripe.customers.retrieve(customerId);
+            if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
+          } catch (e) {
+            console.warn(`[auto-provision] customer lookup failed: ${e}`);
+          }
+          await autoAssignContainer({
+            env,
+            subscriptionId: subEvent.id,
+            customerEmail: email,
+            planKey: (subEvent.metadata?.plan_key as string | undefined) ?? null,
+            deviceName: (subEvent.metadata?.device_name as string | undefined) ?? null,
+            triggerId: event.id,
+          });
+        }
         break;
+      }
 
       case "setup_intent.succeeded":
         await onSetupIntentSucceeded(stripe, env, event.data.object as Stripe.SetupIntent);
@@ -142,7 +168,7 @@ async function onSetupIntentSucceeded(
       customerEmail: email,
       planKey,
       deviceName: (sub.metadata?.device_name as string | undefined) ?? null,
-      setupIntentId: si.id,
+      triggerId: si.id,
     });
   } else {
     console.warn(
