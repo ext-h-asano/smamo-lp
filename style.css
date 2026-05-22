@@ -744,9 +744,10 @@ img {
 
 .phone-img {
     width: 370px;
-    height: 645px;
+    height: auto;
+    aspect-ratio: 1080 / 2200;
     display: block;
-    margin-top: -20px;
+    margin-top: 0;
     border: 0;
     background: transparent;
     filter: none;
