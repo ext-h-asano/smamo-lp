@@ -24,6 +24,8 @@ export interface Env {
   DISCORD_WEBHOOK_URL?: string;
   /** 割当成功後のプール残量がこの値以下なら warn 通知。数値文字列。デフォルト "3" */
   POOL_WARN_THRESHOLD?: string;
+  /** "true" のとき、初期費用無料キャンペーンを有効化し checkout で初期費用 ¥33,000 の付与をスキップする。終了時は "false" / 未設定にして再デプロイ */
+  INITIAL_FEE_WAIVED?: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {
