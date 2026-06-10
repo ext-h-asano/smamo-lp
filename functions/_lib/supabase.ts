@@ -128,10 +128,13 @@ export async function ensureUserExists(
     throw new Error(`supabase createUser failed (${created.status}): ${extractErrorMessage(created.body)}`);
   }
 
-  const filter = encodeURIComponent(`email.eq.${email}`);
+  // GoTrue admin API の filter は PostgREST 構文ではなくプレーン文字列の
+  // 部分一致検索。部分一致で複数ヒットしうるので per_page を広げて
+  // 完全一致を探す。
+  const filter = encodeURIComponent(email);
   const list = await adminFetch<{ users?: AuthUser[] }>(
     cfg,
-    `/auth/v1/admin/users?filter=${filter}&per_page=1`,
+    `/auth/v1/admin/users?filter=${filter}&per_page=50`,
     { method: "GET" },
   );
   const existing = list.body?.users?.find((u) => u.email === email);
