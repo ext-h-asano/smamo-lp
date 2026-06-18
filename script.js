@@ -480,6 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (passwordLabel) {
             passwordLabel.firstChild.textContent = '既存アカウントのパスワード ';
         }
+        const invitationGroup = document.getElementById('invitationCode')?.closest('.form-group');
+        if (invitationGroup) invitationGroup.style.display = 'none';
     }
 
     if (modal) {
@@ -650,6 +652,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         password,
                         device_name: prefillDeviceName || null,
                         mode: isAddDeviceMode ? 'add_device' : 'signup',
+                        invitation_code: (document.getElementById('invitationCode')?.value || '').trim() || null,
                     }),
                 });
                 const data = await resp.json();

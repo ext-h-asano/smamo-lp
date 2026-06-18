@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
-import { ensureUserExists } from "../_lib/supabase";
+import { ensureUserExists, resolveAgencyByCode, setUserReferralIfEmpty } from "../_lib/supabase";
 
 interface CheckoutRequest {
   plan: PlanKey;
@@ -11,6 +11,7 @@ interface CheckoutRequest {
   password: string;
   device_name?: string | null;
   mode?: "signup" | "add_device";
+  invitation_code?: string | null;
 }
 
 function isPlanKey(v: unknown): v is PlanKey {
@@ -33,10 +34,29 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return jsonResponse({ error: "パスワードは 8 文字以上で入力してください。" }, 400);
   }
 
+  const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
+
+  // 招待コード（任意）: 入力があれば有効な代理店か照合する。
+  // 検証はユーザー/Stripe を作る前に行い、無効なら 400 で中断する。
+  let agencyId: string | null = null;
+  const agencyCode = (body.invitation_code ?? "").trim().toUpperCase();
+  if (agencyCode) {
+    try {
+      agencyId = await resolveAgencyByCode(cfg, agencyCode);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[checkout] agency lookup failed:", msg);
+      return jsonResponse({ error: "システムエラーが発生しました。時間をおいて再度お試しください。" }, 500);
+    }
+    if (!agencyId) {
+      return jsonResponse({ error: "招待コードが無効です。", code: "invalid_invitation_code" }, 400);
+    }
+  }
+
   let supabaseUser;
   try {
     supabaseUser = await ensureUserExists(
-      { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY },
+      cfg,
       body.email,
       body.password,
       body.name ?? "",
@@ -45,6 +65,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[checkout] supabase user creation failed:", msg);
     return jsonResponse({ error: "アカウント作成に失敗しました。時間をおいて再度お試しください。" }, 500);
+  }
+
+  // 代理店アトリビューション（ベストエフォート: 失敗しても申込はブロックしない）
+  if (agencyId) {
+    try {
+      await setUserReferralIfEmpty(cfg, supabaseUser.id, agencyId);
+    } catch (err) {
+      console.error("[checkout] set referral failed:", err instanceof Error ? err.message : String(err));
+    }
   }
 
   const stripe = makeStripe(env.STRIPE_SECRET_KEY);
@@ -95,6 +124,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // キャンペーンで初期費用を無料化した場合、後からサポートで追えるよう記録を残す
   if (plan.hasInitialFee && initialFeeWaived) {
     metadata.initial_fee_waived = "true";
+  }
+  if (agencyCode && agencyId) {
+    metadata.agency_code = agencyCode;
   }
 
   const deviceLabel = body.device_name?.trim()

@@ -244,3 +244,59 @@ export async function upsertSubscription(
     throw new Error(`supabase upsert failed (${resp.status}): ${extractErrorMessage(resp.body)}`);
   }
 }
+
+/**
+ * 招待コードから「有効な」代理店の id を解決する。
+ * 該当なしは null。疎通/HTTP エラーは throw（呼び出し側で 500 と無効コードを区別するため）。
+ * code は呼び出し側で正規化済み（trim + uppercase）を渡すこと。
+ */
+export async function resolveAgencyByCode(
+  cfg: SupabaseAdminConfig,
+  code: string,
+): Promise<string | null> {
+  const path =
+    `/rest/v1/agencies?code=eq.${encodeURIComponent(code)}` +
+    `&active=eq.true&select=id&limit=1`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`agencies lookup failed (${resp.status}): ${body}`);
+  }
+  const rows = (await resp.json()) as { id?: string }[];
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * users.referred_by_agency_id を「未設定 (NULL) の場合のみ」埋める。
+ * is.null ガードにより既存のアトリビューションは上書きしない（再契約/add_device 対策）。
+ * 0 行更新（既に紐付け済み）も 2xx で成功扱い。
+ */
+export async function setUserReferralIfEmpty(
+  cfg: SupabaseAdminConfig,
+  userId: string,
+  agencyId: string,
+): Promise<void> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/rest/v1/users` +
+      `?id=eq.${encodeURIComponent(userId)}&referred_by_agency_id=is.null`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: cfg.serviceRoleKey,
+        Authorization: `Bearer ${cfg.serviceRoleKey}`,
+        "content-type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ referred_by_agency_id: agencyId }),
+    },
+  );
+  if (resp.status < 200 || resp.status >= 300) {
+    const body = await resp.text();
+    throw new Error(`users.referred_by_agency_id update failed (${resp.status}): ${body}`);
+  }
+}
