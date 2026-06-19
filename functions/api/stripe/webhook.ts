@@ -1,27 +1,14 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../../_lib/stripe";
-import { sendEmail } from "../../_lib/email";
-import { welcomeEmail } from "../../_lib/email_templates";
-import { INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey } from "../../_lib/plans";
 import {
   StripeSubscriptionRow,
   recomputeContractStatus,
   upsertSubscription,
 } from "../../_lib/supabase";
 import { autoAssignContainer } from "../../_lib/auto_provisioning";
+import { sendProvisioningEmail } from "../../_lib/provisioning_email";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
-const SMS_OPTION_FEE_JPY = 550;
-const PLAN_AMOUNTS_JPY: Record<PlanKey, number> = {
-  monthly: 3278,
-  yearly: 32780,
-  two_year: 5478,
-};
-const PLAN_HAS_INITIAL_FEE: Record<PlanKey, boolean> = {
-  monthly: true,
-  yearly: true,
-  two_year: false,
-};
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -59,7 +46,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           } catch (e) {
             console.warn(`[auto-provision] customer lookup failed: ${e}`);
           }
-          await autoAssignContainer({
+          const reason = await autoAssignContainer({
             env,
             stripe,
             subscriptionId: subEvent.id,
@@ -68,6 +55,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             deviceName: (subEvent.metadata?.device_name as string | undefined) ?? null,
             triggerId: event.id,
           });
+          await sendProvisioningEmail(stripe, env, subEvent, reason);
         }
         break;
       }
@@ -109,69 +97,40 @@ async function onSetupIntentSucceeded(
   si: Stripe.SetupIntent,
 ): Promise<void> {
   // SetupIntent succeeded はカード登録完了 (trial 開始) のタイミング。
-  // ここで Welcome メール 1 通を送る。重複送信は Resend の Idempotency-Key
-  // (setup_intent.id) で防ぐ。
+  // コンテナを自動割当し、その結果 (reason) に応じてメール種別を決める。
+  // Welcome / 順番待ち メールはそれぞれ idempotencyKey=welcome:/waitlist:<sub.id> で
+  // 重複送信を防ぐ。
   if (!si.customer) {
     console.log(`[email] setup_intent.succeeded but no customer attached si=${si.id}`);
     return;
   }
   const customerId = typeof si.customer === "string" ? si.customer : si.customer.id;
-  const customer = await stripe.customers.retrieve(customerId);
-  if (customer.deleted) return;
-  const email = (customer as Stripe.Customer).email;
-  if (!email) {
-    console.log(`[email] customer ${customerId} has no email; skip welcome`);
-    return;
-  }
-  const name = (customer as Stripe.Customer).name;
 
-  // 直近で作られた当該 customer のサブスクから plan / sms を引く。
+  // 直近で作られた当該 customer のサブスクを取得して autoAssign の引数に使う。
+  let email: string | null = null;
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
+  } catch (e) {
+    console.warn(`[auto-provision] customer lookup failed: ${e}`);
+  }
+
   const subs = await stripe.subscriptions.list({ customer: customerId, limit: 5 });
   const sub = subs.data.find((s) => s.status === "trialing" || s.status === "active") ?? subs.data[0];
-  const planKey = (sub?.metadata?.plan_key as PlanKey | undefined) ?? "monthly";
-  const withSms = sub?.metadata?.with_sms === "true";
 
-  const planAmount = PLAN_AMOUNTS_JPY[planKey] ?? PLAN_AMOUNTS_JPY.monthly;
-  const initFee = PLAN_HAS_INITIAL_FEE[planKey] ? INITIAL_FEE_JPY : 0;
-  const smsFee = withSms ? SMS_OPTION_FEE_JPY : 0;
-  const firstChargeAmount = planAmount + initFee + smsFee;
-
-  const planLabel =
-    PLAN_DISPLAY_NAME[planKey] + (withSms ? " + SMS オプション" : "");
-
-  const trialEndIso = sub?.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
-  const trialEndDate = trialEndIso
-    ? trialEndIso.slice(0, 10)
-    : new Date(Date.now() + 3 * 86400 * 1000).toISOString().slice(0, 10);
-
-  const tmpl = welcomeEmail({
-    name,
-    email,
-    planLabel,
-    trialEndDate,
-    firstChargeAmount,
-  });
-  await sendEmail(env.RESEND_API_KEY, {
-    to: email,
-    subject: tmpl.subject,
-    html: tmpl.html,
-    text: tmpl.text,
-    idempotencyKey: `welcome:${si.id}`,
-  });
-
-  // ---- コンテナ自動割当 (welcome メール送信後) ----
-  // sub は既に上で stripe.subscriptions.list から取得済。
+  // ---- コンテナ自動割当 ----
   // sub が無い (= subscription 未確定) なら割当もできないので skip
   if (sub) {
-    await autoAssignContainer({
+    const reason = await autoAssignContainer({
       env,
       stripe,
       subscriptionId: sub.id,
       customerEmail: email,
-      planKey,
+      planKey: (sub.metadata?.plan_key as string | undefined) ?? null,
       deviceName: (sub.metadata?.device_name as string | undefined) ?? null,
       triggerId: si.id,
     });
+    await sendProvisioningEmail(stripe, env, sub, reason);
   } else {
     console.warn(
       `[auto-provision] no subscription found for customer=${customerId} si=${si.id}, skip`,

@@ -103,3 +103,29 @@ https://smamo.jp/
 
   return { subject, html, text };
 }
+
+export function waitlistRegisteredEmail(args: { name?: string | null; email: string }): {
+  subject: string; html: string; text: string;
+} {
+  const greeting = args.name ? `${args.name} 様` : "お客様";
+  const subject = "【SMAMO】順番待ちに登録しました（料金は発生しません）";
+  const text = [
+    `${greeting}`,
+    "",
+    "この度はお申し込みありがとうございます。",
+    "現在ご利用枠が満員のため、順番待ちに登録いたしました。",
+    "デバイスのご用意ができ次第、改めてご案内メールをお送りします。",
+    "",
+    "■ ご安心ください：割り当てが完了するまで料金は一切発生しません。",
+    "（無料体験・ご請求はデバイスをご用意できた時点から開始します）",
+    "",
+    "SMAMO サポート",
+  ].join("\n");
+  const html = `<p>${greeting}</p>
+<p>この度はお申し込みありがとうございます。<br>
+現在ご利用枠が満員のため、<b>順番待ち</b>に登録いたしました。デバイスのご用意ができ次第、改めてご案内メールをお送りします。</p>
+<p><b>ご安心ください：割り当てが完了するまで料金は一切発生しません。</b><br>
+（無料体験・ご請求はデバイスをご用意できた時点から開始します）</p>
+<p>SMAMO サポート</p>`;
+  return { subject, html, text };
+}

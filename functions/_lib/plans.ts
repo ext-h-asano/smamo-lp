@@ -22,3 +22,17 @@ export const PLAN_DISPLAY_NAME: Record<PlanKey, string> = {
 
 export const INITIAL_FEE_JPY = 33000;
 export const TRIAL_DAYS = 3;
+
+export const SMS_OPTION_FEE_JPY = 550;
+
+export const PLAN_AMOUNTS_JPY: Record<PlanKey, number> = {
+  monthly: 3278,
+  yearly: 32780,
+  two_year: 5478,
+};
+
+export const PLAN_HAS_INITIAL_FEE: Record<PlanKey, boolean> = {
+  monthly: true,
+  yearly: true,
+  two_year: false,
+};
