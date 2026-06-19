@@ -31,7 +31,7 @@ interface AutoAssignArgs {
  * - reason='ok'         → info 通知 + 残量 ≤ POOL_WARN_THRESHOLD なら warn 追加
  * - reason='already'    → No-op (通知なし、log のみ)
  * - reason='not_found'  → log のみ (subscription.created webhook 側で再試行されるので通知不要)
- * - reason='exhausted'  → critical
+ * - reason='exhausted'  → trial_end 凍結 + mark_waitlisted + warn 通知（mark 失敗時は critical）
  * - RPC エラー          → critical
  *
  * never throw: Stripe webhook の 200 返却を妨げない。
@@ -138,6 +138,14 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
         });
       } catch (e) {
         console.error(`[waitlist] mark_waitlisted 失敗 sub=${subscriptionId}: ${e}`);
+        await sendDiscord(env, "critical", {
+          title: "🚨 順番待ち DB 記録失敗（凍結済・未エンキュー）",
+          fields: [
+            { name: "subscription_id", value: subscriptionId },
+            { name: "error", value: e instanceof Error ? e.message : String(e) },
+            { name: "action", value: "trial_end は凍結済だが waitlist 未登録 → 手動で mark_waitlisted RPC 実行 or 手動割当。放置すると顧客が永久に未割当のまま" },
+          ],
+        });
       }
 
       await sendDiscord(env, "warn", {
