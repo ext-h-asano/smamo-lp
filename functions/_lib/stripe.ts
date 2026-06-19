@@ -26,6 +26,10 @@ export interface Env {
   POOL_WARN_THRESHOLD?: string;
   /** "true" のとき、初期費用無料キャンペーンを有効化し checkout で初期費用 ¥33,000 の付与をスキップする。終了時は "false" / 未設定にして再デプロイ */
   INITIAL_FEE_WAIVED?: string;
+  /** 順番待ち登録時に trial_end を凍結する日数。数値文字列。デフォルト "365" */
+  WAITLIST_FREEZE_DAYS?: string;
+  /** ドレインエンドポイントの認証シークレット */
+  DRAIN_SECRET: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {

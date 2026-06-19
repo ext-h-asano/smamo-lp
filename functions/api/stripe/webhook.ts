@@ -61,6 +61,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           }
           await autoAssignContainer({
             env,
+            stripe,
             subscriptionId: subEvent.id,
             customerEmail: email,
             planKey: (subEvent.metadata?.plan_key as string | undefined) ?? null,
@@ -164,6 +165,7 @@ async function onSetupIntentSucceeded(
   if (sub) {
     await autoAssignContainer({
       env,
+      stripe,
       subscriptionId: sub.id,
       customerEmail: email,
       planKey,

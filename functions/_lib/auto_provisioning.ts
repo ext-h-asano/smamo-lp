@@ -1,8 +1,9 @@
+import type Stripe from "stripe";
 import type { Env } from "./stripe";
 import { sendDiscord } from "./discord";
 import { adminFetch } from "./supabase";
 
-type AutoAssignReason = "ok" | "already" | "not_found" | "exhausted";
+export type AutoAssignReason = "ok" | "already" | "not_found" | "exhausted";
 
 interface AutoAssignResult {
   reason: AutoAssignReason;
@@ -14,6 +15,7 @@ interface AutoAssignResult {
 
 interface AutoAssignArgs {
   env: Env;
+  stripe: Stripe;            // trial_end 凍結に使う
   subscriptionId: string;
   customerEmail?: string | null;
   planKey?: string | null;
@@ -34,7 +36,7 @@ interface AutoAssignArgs {
  *
  * never throw: Stripe webhook の 200 返却を妨げない。
  */
-export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
+export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAssignReason> {
   const { env, subscriptionId, customerEmail, planKey, deviceName, triggerId } = args;
 
   const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
@@ -57,7 +59,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
         { name: "action", value: "手動 /assign-user で復旧してください" },
       ],
     });
-    return;
+    return "not_found";
   }
 
   if (rpcResp.status < 200 || rpcResp.status >= 300) {
@@ -75,7 +77,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
         { name: "action", value: "手動 /assign-user で復旧してください" },
       ],
     });
-    return;
+    return "not_found";
   }
 
   const rows = (Array.isArray(rpcResp.body) ? rpcResp.body : []) as AutoAssignResult[];
@@ -93,7 +95,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
         { name: "action", value: "DB 側 function 定義を確認してください" },
       ],
     });
-    return;
+    return "not_found";
   }
 
   switch (data.reason) {
@@ -103,28 +105,58 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
       console.log(
         `[auto-provision] sub not in DB yet (race with subscription.created): sub=${subscriptionId} trigger=${triggerId}`,
       );
-      return;
+      return "not_found";
 
-    case "exhausted":
-      await sendDiscord(env, "critical", {
-        title: "🚨 プール枯渇 - 割当失敗",
+    case "exhausted": {
+      // 課金時計を凍結（trial_end を遠い未来へ）。
+      const freezeDays = Number(env.WAITLIST_FREEZE_DAYS ?? "365");
+      const days = Number.isFinite(freezeDays) && freezeDays > 0 ? freezeDays : 365;
+      const frozenTrialEnd = Math.floor(Date.now() / 1000) + days * 86400;
+      try {
+        await args.stripe.subscriptions.update(subscriptionId, {
+          trial_end: frozenTrialEnd,
+          proration_behavior: "none",
+        });
+      } catch (e) {
+        console.error(`[waitlist] trial_end 凍結失敗 sub=${subscriptionId}: ${e}`);
+        await sendDiscord(env, "critical", {
+          title: "🚨 順番待ち凍結失敗（trial_end 更新エラー）",
+          fields: [
+            { name: "subscription_id", value: subscriptionId },
+            { name: "error", value: e instanceof Error ? e.message : String(e) },
+            { name: "action", value: "手動で trial_end を延長 / コンテナ手動割当" },
+          ],
+        });
+        return "exhausted";
+      }
+
+      // DB に待ち登録（FIFO キー）
+      try {
+        await adminFetch<unknown>(cfg, "/rest/v1/rpc/mark_waitlisted", {
+          method: "POST",
+          json: { p_subscription_id: subscriptionId },
+        });
+      } catch (e) {
+        console.error(`[waitlist] mark_waitlisted 失敗 sub=${subscriptionId}: ${e}`);
+      }
+
+      await sendDiscord(env, "warn", {
+        title: "🕒 順番待ち登録（プール枯渇）",
         fields: [
           { name: "subscription_id", value: subscriptionId },
           { name: "email", value: customerEmail ?? "(unknown)" },
           { name: "plan_key", value: planKey ?? "(unknown)" },
-          {
-            name: "action",
-            value: "1) ssh で `/fill-container` 実行 / 2) `/admin/users` で手動 assign",
-          },
+          { name: "action", value: "`/fill-container` で補充すれば自動で割当されます" },
         ],
       });
-      return;
+      return "exhausted";
+    }
 
     case "already":
       console.log(
         `[auto-provision] already_assigned: sub=${subscriptionId} container=${data.container_name}`,
       );
-      return;
+      return "already";
 
     case "ok": {
       const remaining = data.remaining_pool ?? -1;
@@ -147,7 +179,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
           fields: [{ name: "action", value: "`/fill-container` で補充推奨" }],
         });
       }
-      return;
+      return "ok";
     }
 
     default: {
@@ -162,7 +194,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<void> {
           { name: "action", value: "DB function 定義を確認してください" },
         ],
       });
-      return;
+      return "not_found";
     }
   }
 }
