@@ -93,7 +93,7 @@ export async function sendWaitlistRegisteredForSub(
  *
  *   ok | already   → Welcome email  (idempotencyKey: welcome:<sub.id>)
  *   exhausted      → Waitlist email (idempotencyKey: waitlist:<sub.id>)
- *   not_found      → No-op (subscription.created rescue path will send on final reason)
+ *   not_found      → No-op (sub not yet in DB; any later rescue call handles the email)
  */
 export async function sendProvisioningEmail(
   stripe: Stripe,
@@ -109,5 +109,5 @@ export async function sendProvisioningEmail(
     await sendWaitlistRegisteredForSub(stripe, env, sub);
     return;
   }
-  // not_found: send nothing — subscription.created rescue path will email on its final reason
+  // not_found: no container was assigned and the sub isn't yet in our DB — send nothing. If a rescue path later resolves to ok/exhausted, that call will send the appropriate email (idempotency-keyed by sub.id).
 }
