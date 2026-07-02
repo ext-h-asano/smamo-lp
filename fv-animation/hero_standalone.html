@@ -1,179 +1,1418 @@
-<!DOCTYPE html>
-<html lang="ja"><head>
-<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-
-<meta charset="utf-8">
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
 <title>スマモ ヒーローアニメーション</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-
-
-
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
   @keyframes smamoCaret { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
   @keyframes smamoSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes smamoSpinSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
-
-
-
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script>
+  window.__resources = {
+    iosHome: "assets/ios-home.jpg",
+    androidHome: "assets/android-home.jpg",
+    devicesList: "assets/devices.jpg",
+    splash: "assets/splash.jpg",
+    opening: "assets/opening.jpg"
+  };
+</script>
+<script>
+(function(){
+  function hidePlaybackBar(){
+    var resetBtn=document.querySelector('button[title="Return to start (0)"]');
+    var playBtn=document.querySelector('button[title="Play/pause (space)"]');
+    var bar=(resetBtn&&resetBtn.parentElement)||(playBtn&&playBtn.parentElement);
+    if(bar){bar.style.display="none";}
+  }
+  function scrubDarkBackgrounds(){
+    // Disable background scrub as it transparency-fades the black calculator screen backgrounds and makes button white-text invisible on white parent backgrounds.
+  }
+  function refreshTweaks(){hidePlaybackBar();scrubDarkBackgrounds();}
+  refreshTweaks();
+  window.addEventListener("load",refreshTweaks);
+  requestAnimationFrame(refreshTweaks);
+  setTimeout(refreshTweaks,120);
+  setTimeout(refreshTweaks,300);
+  setTimeout(refreshTweaks,700);
+  setTimeout(refreshTweaks,1200);
+  setTimeout(refreshTweaks,2000);
+})();
+</script>
 </head>
 <body>
 <div id="root" style="position:absolute;inset:0"></div>
-<script>// animations.jsx
-// Reusable animation starter: Stage, Timeline, Sprite, easing helpers.
-// Usage (in an HTML file that loads React + Babel):
-//
-//   <Stage width={1280} height={720} duration={10} background="#f6f4ef">
-//     <MyScene />
-//   </Stage>
-//
-// Inside <Stage>, any child can call useTime() to read the current
-// playhead (seconds). Or wrap content in <Sprite start={1} end={4}>...</Sprite>
-// to only render during that window -- children receive a `localTime` and
-// `progress` via the useSprite() hook.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// ── Easing functions (hand-rolled, Popmotion-style) ─────────────────────────
-// All easings take t ∈ [0,1] and return eased t ∈ [0,1] (may overshoot for back/elastic).
-const Easing={linear:t=>t,// Quad
-easeInQuad:t=>t*t,easeOutQuad:t=>t*(2-t),easeInOutQuad:t=>t<0.5?2*t*t:-1+(4-2*t)*t,// Cubic
-easeInCubic:t=>t*t*t,easeOutCubic:t=>--t*t*t+1,easeInOutCubic:t=>t<0.5?4*t*t*t:(t-1)*(2*t-2)*(2*t-2)+1,// Quart
-easeInQuart:t=>t*t*t*t,easeOutQuart:t=>1- --t*t*t*t,easeInOutQuart:t=>t<0.5?8*t*t*t*t:1-8*--t*t*t*t,// Expo
-easeInExpo:t=>t===0?0:Math.pow(2,10*(t-1)),easeOutExpo:t=>t===1?1:1-Math.pow(2,-10*t),easeInOutExpo:t=>{if(t===0)return 0;if(t===1)return 1;if(t<0.5)return 0.5*Math.pow(2,20*t-10);return 1-0.5*Math.pow(2,-20*t+10);},// Sine
-easeInSine:t=>1-Math.cos(t*Math.PI/2),easeOutSine:t=>Math.sin(t*Math.PI/2),easeInOutSine:t=>-(Math.cos(Math.PI*t)-1)/2,// Back (overshoot)
-easeOutBack:t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);},easeInBack:t=>{const c1=1.70158,c3=c1+1;return c3*t*t*t-c1*t*t;},easeInOutBack:t=>{const c1=1.70158,c2=c1*1.525;return t<0.5?Math.pow(2*t,2)*((c2+1)*2*t-c2)/2:(Math.pow(2*t-2,2)*((c2+1)*(t*2-2)+c2)+2)/2;},// Elastic
-easeOutElastic:t=>{const c4=2*Math.PI/3;if(t===0)return 0;if(t===1)return 1;return Math.pow(2,-10*t)*Math.sin((t*10-0.75)*c4)+1;}};// ── Core interpolation helpers ──────────────────────────────────────────────
-// Clamp a value to [min, max]
-const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));// interpolate([0, 0.5, 1], [0, 100, 50], ease?) -> fn(t)
-// Popmotion-style: linearly maps t across input keyframes to output values,
-// with optional easing per segment (single fn or array of fns).
-function interpolate(input,output,ease=Easing.linear){return t=>{if(t<=input[0])return output[0];if(t>=input[input.length-1])return output[output.length-1];for(let i=0;i<input.length-1;i++){if(t>=input[i]&&t<=input[i+1]){const span=input[i+1]-input[i];const local=span===0?0:(t-input[i])/span;const easeFn=Array.isArray(ease)?ease[i]||Easing.linear:ease;const eased=easeFn(local);return output[i]+(output[i+1]-output[i])*eased;}}return output[output.length-1];};}// animate({from, to, start, end, ease})(t) — simpler single-segment tween.
-// Returns `from` before `start`, `to` after `end`.
-function animate({from=0,to=1,start=0,end=1,ease=Easing.easeInOutCubic}){return t=>{if(t<=start)return from;if(t>=end)return to;const local=(t-start)/(end-start);return from+(to-from)*ease(local);};}// ── Timeline context ────────────────────────────────────────────────────────
-const TimelineContext=React.createContext({time:0,duration:10,playing:false});const useTime=()=>React.useContext(TimelineContext).time;const useTimeline=()=>React.useContext(TimelineContext);// ── Sprite ──────────────────────────────────────────────────────────────────
-// Renders children only when the playhead is inside [start, end]. Provides
-// a sub-context with `localTime` (seconds since start) and `progress` (0..1).
-//
-//   <Sprite start={2} end={5}>
-//     {({ localTime, progress }) => <Thing x={progress * 100} />}
-//   </Sprite>
-//
-// Or as a plain wrapper — children can call useSprite() themselves.
-const SpriteContext=React.createContext({localTime:0,progress:0,duration:0});const useSprite=()=>React.useContext(SpriteContext);function Sprite({start=0,end=Infinity,children,keepMounted=false}){const{time}=useTimeline();const visible=time>=start&&time<=end;if(!visible&&!keepMounted)return null;const duration=end-start;const localTime=Math.max(0,time-start);const progress=duration>0&&isFinite(duration)?clamp(localTime/duration,0,1):0;const value={localTime,progress,duration,visible};return/*#__PURE__*/React.createElement(SpriteContext.Provider,{value:value},typeof children==='function'?children(value):children);}// ── Sample sprite components ────────────────────────────────────────────────
-// TextSprite: fades/slides text in on entry, holds, then fades out on exit.
-// Props: text, x, y, size, color, font, entryDur, exitDur, align
-function TextSprite({text,x=0,y=0,size=48,color='#111',font='Inter, system-ui, sans-serif',weight=600,entryDur=0.45,exitDur=0.35,entryEase=Easing.easeOutBack,exitEase=Easing.easeInCubic,align='left',letterSpacing='-0.01em'}){const{localTime,duration}=useSprite();const exitStart=Math.max(0,duration-exitDur);let opacity=1;let ty=0;if(localTime<entryDur){const t=entryEase(clamp(localTime/entryDur,0,1));opacity=t;ty=(1-t)*16;}else if(localTime>exitStart){const t=exitEase(clamp((localTime-exitStart)/exitDur,0,1));opacity=1-t;ty=-t*8;}const translateX=align==='center'?'-50%':align==='right'?'-100%':'0';return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,transform:`translate(${translateX}, ${ty}px)`,opacity,fontFamily:font,fontSize:size,fontWeight:weight,color,letterSpacing,whiteSpace:'pre',lineHeight:1.1,willChange:'transform, opacity'}},text);}// ImageSprite: scales + fades in; optional Ken Burns drift during hold.
-function ImageSprite({src,x=0,y=0,width=400,height=300,entryDur=0.6,exitDur=0.4,kenBurns=false,kenBurnsScale=1.08,radius=12,fit='cover',placeholder=null// {label: string} for striped placeholder
-}){const{localTime,duration}=useSprite();const exitStart=Math.max(0,duration-exitDur);let opacity=1;let scale=1;if(localTime<entryDur){const t=Easing.easeOutCubic(clamp(localTime/entryDur,0,1));opacity=t;scale=0.96+0.04*t;}else if(localTime>exitStart){const t=Easing.easeInCubic(clamp((localTime-exitStart)/exitDur,0,1));opacity=1-t;scale=(kenBurns?kenBurnsScale:1)+0.02*t;}else if(kenBurns){const holdSpan=exitStart-entryDur;const holdT=holdSpan>0?(localTime-entryDur)/holdSpan:0;scale=1+(kenBurnsScale-1)*holdT;}const content=placeholder?/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',background:'repeating-linear-gradient(135deg, #e9e6df 0 10px, #dcd8cf 10px 20px)',color:'#6b6458',fontFamily:'JetBrains Mono, ui-monospace, monospace',fontSize:13,letterSpacing:'0.04em',textTransform:'uppercase'}},placeholder.label||'image'):/*#__PURE__*/React.createElement("img",{src:src,alt:"",style:{width:'100%',height:'100%',objectFit:fit,display:'block'}});return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width,height,opacity,transform:`scale(${scale})`,transformOrigin:'center',borderRadius:radius,overflow:'hidden',willChange:'transform, opacity'}},content);}// RectSprite: simple rectangle that animates position/size/color via props.
-// Useful demo primitive — takes a `render` fn for per-frame customization.
-function RectSprite({x=0,y=0,width=100,height=100,color='#111',radius=8,entryDur=0.4,exitDur=0.3,render// optional: (ctx) => style overrides
-}){const spriteCtx=useSprite();const{localTime,duration}=spriteCtx;const exitStart=Math.max(0,duration-exitDur);let opacity=1;let scale=1;if(localTime<entryDur){const t=Easing.easeOutBack(clamp(localTime/entryDur,0,1));opacity=clamp(localTime/entryDur,0,1);scale=0.4+0.6*t;}else if(localTime>exitStart){const t=Easing.easeInQuad(clamp((localTime-exitStart)/exitDur,0,1));opacity=1-t;scale=1-0.15*t;}const overrides=render?render(spriteCtx):{};return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width,height,background:color,borderRadius:radius,opacity,transform:`scale(${scale})`,transformOrigin:'center',willChange:'transform, opacity',...overrides}});}function Stage({width=1280,height=720,duration=10,background='#f6f4ef',fps=60,loop=true,autoplay=true,persistKey='animstage',children}){const[time,setTime]=React.useState(()=>{try{const v=parseFloat(localStorage.getItem(persistKey+':t')||'0');return isFinite(v)?clamp(v,0,duration):0;}catch{return 0;}});const[playing,setPlaying]=React.useState(autoplay);const[hoverTime,setHoverTime]=React.useState(null);const[scale,setScale]=React.useState(1);const stageRef=React.useRef(null);const canvasRef=React.useRef(null);const rafRef=React.useRef(null);const lastTsRef=React.useRef(null);// Persist playhead
-React.useEffect(()=>{try{localStorage.setItem(persistKey+':t',String(time));}catch{}},[time,persistKey]);// Auto-scale to fit viewport
-React.useEffect(()=>{if(!stageRef.current)return;const el=stageRef.current;const measure=()=>{const barH=0;const s=Math.min(el.clientWidth/width,(el.clientHeight-barH)/height);setScale(Math.max(0.05,s));};measure();const ro=new ResizeObserver(measure);ro.observe(el);window.addEventListener('resize',measure);return()=>{ro.disconnect();window.removeEventListener('resize',measure);};},[width,height]);// Animation loop
-React.useEffect(()=>{if(!playing){lastTsRef.current=null;return;}const step=ts=>{if(lastTsRef.current==null)lastTsRef.current=ts;const dt=(ts-lastTsRef.current)/1000;lastTsRef.current=ts;setTime(t=>{let next=t+dt;if(next>=duration){if(loop)next=next%duration;else{next=duration;setPlaying(false);}}return next;});rafRef.current=requestAnimationFrame(step);};rafRef.current=requestAnimationFrame(step);return()=>{if(rafRef.current)cancelAnimationFrame(rafRef.current);lastTsRef.current=null;};},[playing,duration,loop]);// Keyboard: space = play/pause, ← → = seek
-React.useEffect(()=>{const onKey=e=>{if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'))return;if(e.code==='Space'){e.preventDefault();setPlaying(p=>!p);}else if(e.code==='ArrowLeft'){setTime(t=>clamp(t-(e.shiftKey?1:0.1),0,duration));}else if(e.code==='ArrowRight'){setTime(t=>clamp(t+(e.shiftKey?1:0.1),0,duration));}else if(e.key==='0'||e.code==='Home'){setTime(0);}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[duration]);const displayTime=hoverTime!=null?hoverTime:time;const ctxValue=React.useMemo(()=>({time:displayTime,duration,playing,setTime,setPlaying}),[displayTime,duration,playing]);return/*#__PURE__*/React.createElement("div",{ref:stageRef,style:{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',background:'#0a0a0a',fontFamily:'Inter, system-ui, sans-serif'}},/*#__PURE__*/React.createElement("div",{style:{flex:1,width:'100%',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',minHeight:0}},/*#__PURE__*/React.createElement("div",{ref:canvasRef,style:{width,height,background,position:'relative',transform:`scale(${scale})`,transformOrigin:'center',flexShrink:0,boxShadow:'0 20px 60px rgba(0,0,0,0.4)',overflow:'hidden'}},/*#__PURE__*/React.createElement(TimelineContext.Provider,{value:ctxValue},children))));}// ── Playback bar ────────────────────────────────────────────────────────────
-// Play/pause, return-to-begin, scrub track, time display.
-// Uses fixed-width time fields so layout doesn't thrash.
-function PlaybackBar({time,duration,playing,onPlayPause,onReset,onSeek,onHover}){const trackRef=React.useRef(null);const[dragging,setDragging]=React.useState(false);const timeFromEvent=React.useCallback(e=>{const rect=trackRef.current.getBoundingClientRect();const x=clamp((e.clientX-rect.left)/rect.width,0,1);return x*duration;},[duration]);const onTrackMove=e=>{if(!trackRef.current)return;const t=timeFromEvent(e);if(dragging){onSeek(t);}else{onHover(t);}};const onTrackLeave=()=>{if(!dragging)onHover(null);};const onTrackDown=e=>{setDragging(true);const t=timeFromEvent(e);onSeek(t);onHover(null);};React.useEffect(()=>{if(!dragging)return;const onUp=()=>setDragging(false);const onMove=e=>{if(!trackRef.current)return;const t=timeFromEvent(e);onSeek(t);};window.addEventListener('mouseup',onUp);window.addEventListener('mousemove',onMove);return()=>{window.removeEventListener('mouseup',onUp);window.removeEventListener('mousemove',onMove);};},[dragging,timeFromEvent,onSeek]);const pct=duration>0?time/duration*100:0;const fmt=t=>{const total=Math.max(0,t);const m=Math.floor(total/60);const s=Math.floor(total%60);const cs=Math.floor(total*100%100);return`${String(m).padStart(1,'0')}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;};const mono='JetBrains Mono, ui-monospace, SFMono-Regular, monospace';return/*#__PURE__*/React.createElement("div",{style:{display:'flex',alignItems:'center',gap:12,padding:'8px 16px',background:'rgba(20,20,20,0.92)',borderTop:'1px solid rgba(255,255,255,0.08)',width:'100%',maxWidth:680,alignSelf:'center',borderRadius:8,color:'#f6f4ef',fontFamily:'Inter, system-ui, sans-serif',userSelect:'none',flexShrink:0}},/*#__PURE__*/React.createElement(IconButton,{onClick:onReset,title:"Return to start (0)"},/*#__PURE__*/React.createElement("svg",{width:"14",height:"14",viewBox:"0 0 14 14",fill:"none"},/*#__PURE__*/React.createElement("path",{d:"M3 2v10M12 2L5 7l7 5V2z",stroke:"currentColor",strokeWidth:"1.5",strokeLinejoin:"round",strokeLinecap:"round"}))),/*#__PURE__*/React.createElement(IconButton,{onClick:onPlayPause,title:"Play/pause (space)"},playing?/*#__PURE__*/React.createElement("svg",{width:"14",height:"14",viewBox:"0 0 14 14",fill:"none"},/*#__PURE__*/React.createElement("rect",{x:"3",y:"2",width:"3",height:"10",fill:"currentColor"}),/*#__PURE__*/React.createElement("rect",{x:"8",y:"2",width:"3",height:"10",fill:"currentColor"})):/*#__PURE__*/React.createElement("svg",{width:"14",height:"14",viewBox:"0 0 14 14",fill:"none"},/*#__PURE__*/React.createElement("path",{d:"M3 2l9 5-9 5V2z",fill:"currentColor"}))),/*#__PURE__*/React.createElement("div",{style:{fontFamily:mono,fontSize:12,fontVariantNumeric:'tabular-nums',width:64,textAlign:'right',color:'#f6f4ef'}},fmt(time)),/*#__PURE__*/React.createElement("div",{ref:trackRef,onMouseMove:onTrackMove,onMouseLeave:onTrackLeave,onMouseDown:onTrackDown,style:{flex:1,height:22,position:'relative',cursor:'pointer',display:'flex',alignItems:'center'}},/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:0,right:0,height:4,background:'rgba(255,255,255,0.12)',borderRadius:2}}),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:0,width:`${pct}%`,height:4,background:'oklch(72% 0.12 250)',borderRadius:2}}),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:`${pct}%`,top:'50%',width:12,height:12,marginLeft:-6,marginTop:-6,background:'#fff',borderRadius:6,boxShadow:'0 2px 4px rgba(0,0,0,0.4)'}})),/*#__PURE__*/React.createElement("div",{style:{fontFamily:mono,fontSize:12,fontVariantNumeric:'tabular-nums',width:64,textAlign:'left',color:'rgba(246,244,239,0.55)'}},fmt(duration)));}function IconButton({children,onClick,title}){const[hover,setHover]=React.useState(false);return/*#__PURE__*/React.createElement("button",{onClick:onClick,title:title,onMouseEnter:()=>setHover(true),onMouseLeave:()=>setHover(false),style:{width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',background:hover?'rgba(255,255,255,0.12)':'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,color:'#f6f4ef',cursor:'pointer',padding:0,transition:'background 120ms'}},children);}Object.assign(window,{Easing,interpolate,animate,clamp,TimelineContext,useTime,useTimeline,Sprite,SpriteContext,useSprite,TextSprite,ImageSprite,RectSprite,Stage,PlaybackBar});</script>
-<script>// scenes/calc-screen.jsx
-// 電卓UI — スマモの偽装画面。ボタングリッドはスクショに合わせた配色。
-const CALC_KEYS=[['⌫','AC','%','÷'],['7','8','9','×'],['4','5','6','−'],['1','2','3','+'],['+/−','0','·','=']];// 単一キー
-function CalcKey({label,isOp,highlight,scale=1,subtle=false}){const isAC=label==='AC';const baseBg=isOp?'#eef2f7':'#ffffff';const baseColor=isOp?'#5b7a99':'#3a587a';const glow=highlight?'0 0 0 3px rgba(30,136,255,0.55), 0 0 24px rgba(30,136,255,0.7)':'0 1px 2px rgba(60,90,130,0.06)';return/*#__PURE__*/React.createElement("div",{style:{width:72,height:72,borderRadius:'50%',background:baseBg,color:baseColor,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'"SF Pro Display", -apple-system, system-ui, sans-serif',fontSize:isAC?22:28,fontWeight:400,boxShadow:glow,transform:`scale(${scale})`,transition:'box-shadow 80ms linear',opacity:subtle?0.55:1}},label);}// 電卓画面まるごと。activeKey: 押下中のラベル / acPulse: AC強調回数(0..3) / display: 表示数値文字列
-function CalcScreen({display='0',activeKey=null,acHighlight=false,dim=0,operator=null}){return/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',background:'#f4f6fa',display:'flex',flexDirection:'column',position:'relative',filter:dim>0?`brightness(${1-dim*0.5})`:'none'}},/*#__PURE__*/React.createElement("div",{style:{height:36,padding:'8px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center',fontFamily:'"SF Pro Display", system-ui, sans-serif',fontSize:14,color:'#0a0a0a',fontWeight:600}},/*#__PURE__*/React.createElement("span",null,"13:27"),/*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:4,alignItems:'center'}},/*#__PURE__*/React.createElement(SignalDots,null),/*#__PURE__*/React.createElement(WifiIcon,null),/*#__PURE__*/React.createElement(BatteryPill,{pct:90}))),/*#__PURE__*/React.createElement("div",{style:{textAlign:'center',padding:'14px 0 8px',fontFamily:'"SF Pro Display", system-ui, sans-serif',fontSize:16,color:'#222'}},"\u96FB\u5353"),/*#__PURE__*/React.createElement("div",{style:{flex:1,display:'flex',alignItems:'flex-end',justifyContent:'flex-end',padding:'0 32px 14px',fontFamily:'"SF Pro Display", system-ui, sans-serif',fontSize:84,fontWeight:300,color:'#0a0a0a',letterSpacing:'-0.02em',lineHeight:1,position:'relative'}},operator&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',right:32,top:28,fontSize:26,color:'rgba(30,136,255,0.85)',fontWeight:400}},operator),display),/*#__PURE__*/React.createElement("div",{style:{padding:'0 22px 28px',display:'grid',gridTemplateColumns:'repeat(4, 1fr)',gap:10,justifyItems:'center'}},CALC_KEYS.flat().map((k,i)=>{const isOp=['⌫','AC','%','÷','×','−','+','='].includes(k);const active=activeKey===k;const highlight=k==='AC'&&acHighlight;return/*#__PURE__*/React.createElement(CalcKey,{key:i,label:k,isOp:isOp,highlight:highlight,scale:active?0.92:1});})));}// アイコン
-function SignalDots(){return/*#__PURE__*/React.createElement("svg",{width:"16",height:"11",viewBox:"0 0 16 11"},/*#__PURE__*/React.createElement("rect",{x:"0",y:"7",width:"3",height:"4",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"4.5",y:"5",width:"3",height:"6",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"9",y:"2.5",width:"3",height:"8.5",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"13.5",y:"0",width:"3",height:"11",rx:"0.5",fill:"#0a0a0a",opacity:"0.3"}));}function WifiIcon(){return/*#__PURE__*/React.createElement("svg",{width:"16",height:"12",viewBox:"0 0 16 12",style:{marginLeft:4}},/*#__PURE__*/React.createElement("path",{d:"M8 11.5l-1.5-1.5a2.12 2.12 0 0 1 3 0L8 11.5zM5 8.5a4.24 4.24 0 0 1 6 0M2 5.5a8.49 8.49 0 0 1 12 0",stroke:"#0a0a0a",strokeWidth:"1.4",fill:"none",strokeLinecap:"round"}));}function BatteryPill({pct=90}){return/*#__PURE__*/React.createElement("div",{style:{marginLeft:4,width:32,height:14,borderRadius:4,background:'#0a0a0a',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,position:'relative'}},pct,/*#__PURE__*/React.createElement("div",{style:{position:'absolute',right:-2,top:4,width:2,height:6,background:'#0a0a0a',borderRadius:1}}));}Object.assign(window,{CalcScreen,CalcKey});</script>
-<script>// scenes/ios-home.jsx
-// iPhoneホーム画面（実画像ベース）。電卓アプリ位置にタップ演出を重ねる。
-function IOSHome({tapping=false,tapProgress=0}){// 計算機アイコンの位置: 画像内 (右下のグリッド最終列、4行目)
-// 画像サイズ 868x1880。1:1正方形フレームに合わせて縦カバー表示。
-// フレーム上での比率位置（画像の見え方ベース）:
-//   計算機アイコン中心: 横 87% / 縦 50%
-return/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#000'}},/*#__PURE__*/React.createElement("img",{src:typeof window!=='undefined'&&window.__resources&&window.__resources.iosHome||"assets/ios-home.jpg",alt:"",style:{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'contain',objectPosition:'center'}}),tapping&&/*#__PURE__*/React.createElement(TapHighlight,{x:"84%",y:"49%",size:58,progress:tapProgress}));}// タップ波紋＋ハイライト
-function TapHighlight({x,y,size=64,progress=0}){// progress 0..1 で：
-//   0–0.3 リング拡大＋アイコン縮小
-//   0.3–0.7 アイコン光る
-//   0.7–1.0 全体フラッシュ
-const ringP=Math.min(1,progress/0.5);const flash=Math.max(0,progress-0.6)/0.4;const ringSize=size+ringP*60;const ringOp=(1-ringP)*0.9;const iconScale=progress<0.3?1-progress/0.3*0.12:0.88+Math.min(1,(progress-0.3)/0.4)*0.12;return/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width:ringSize,height:ringSize,marginLeft:-ringSize/2,marginTop:-ringSize/2,borderRadius:'50%',border:`2px solid rgba(255,255,255,${ringOp})`,boxShadow:`0 0 24px rgba(255,255,255,${ringOp*0.6}), inset 0 0 16px rgba(255,255,255,${ringOp*0.3})`,pointerEvents:'none'}}),progress>0.15&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width:size+(progress-0.15)/0.5*80,height:size+(progress-0.15)/0.5*80,marginLeft:-(size+(progress-0.15)/0.5*80)/2,marginTop:-(size+(progress-0.15)/0.5*80)/2,borderRadius:'50%',border:`1.5px solid rgba(30,136,255,${(1-(progress-0.15)/0.5)*0.7})`,pointerEvents:'none'}}),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width:size,height:size,marginLeft:-size/2,marginTop:-size/2,borderRadius:14,background:`rgba(255,255,255,${progress<0.4?progress/0.4*0.25:0.25-(progress-0.4)*0.4})`,boxShadow:`0 0 ${20*progress}px rgba(255,255,255,${progress*0.6})`,transform:`scale(${iconScale})`,pointerEvents:'none',mixBlendMode:'overlay'}}),progress<0.5&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,width:36,height:36,marginLeft:-18,marginTop:-18,borderRadius:'50%',background:'rgba(255,255,255,0.35)',border:'2px solid rgba(255,255,255,0.85)',boxShadow:'0 0 12px rgba(255,255,255,0.6)',opacity:1-progress/0.5,transform:`scale(${1-progress/0.5*0.3})`,pointerEvents:'none'}}),flash>0&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,background:`radial-gradient(circle at ${x} ${y}, rgba(255,255,255,${flash*0.7}), transparent 60%)`,pointerEvents:'none'}}));}Object.assign(window,{IOSHome,TapHighlight});</script>
-<script>function _extends(){return _extends=Object.assign?Object.assign.bind():function(n){for(var e=1;e<arguments.length;e++){var t=arguments[e];for(var r in t)({}).hasOwnProperty.call(t,r)&&(n[r]=t[r]);}return n;},_extends.apply(null,arguments);}// scenes/line-screens.jsx
-// プライベートLINE（iOS）と仕事用LINE（Android）のトーク画面。
-function LineScreen({mode='private',scrollOffset=0}){// mode: 'private' (iOS, 家族・友達) / 'work' (Android, 取引先)
-const isWork=mode==='work';const headerBg=isWork?'#06C755':'#06C755';const messages=isWork?WORK_MESSAGES:PRIVATE_MESSAGES;const title=isWork?'田中部長':'あいちゃん 💛';const subtitle=isWork?'取引先':'';return/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',background:'#8da9c4',backgroundImage:isWork?'linear-gradient(180deg, #8a9bb0 0%, #6a7d92 100%)':'linear-gradient(180deg, #b8d4e8 0%, #8da9c4 100%)',position:'relative',overflow:'hidden',fontFamily:'"Hiragino Sans", "Noto Sans JP", system-ui, sans-serif',display:'flex',flexDirection:'column'}},isWork?/*#__PURE__*/React.createElement(AndroidStatusBar,null):/*#__PURE__*/React.createElement(IOSStatusBarLocal,null),/*#__PURE__*/React.createElement("div",{style:{background:headerBg,padding:'8px 14px 12px',display:'flex',alignItems:'center',gap:10,color:'#fff'}},/*#__PURE__*/React.createElement("svg",{width:"22",height:"22",viewBox:"0 0 22 22"},/*#__PURE__*/React.createElement("path",{d:"M14 4l-7 7 7 7",stroke:"#fff",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round",fill:"none"})),/*#__PURE__*/React.createElement("div",{style:{width:36,height:36,borderRadius:'50%',background:isWork?'#3a4a5c':'#ffb3d9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:isWork?'#fff':'#7a3050'}},isWork?'田':'あ'),/*#__PURE__*/React.createElement("div",{style:{flex:1}},/*#__PURE__*/React.createElement("div",{style:{fontSize:15,fontWeight:600}},title),subtitle&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,opacity:0.85}},subtitle)),/*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:14}},/*#__PURE__*/React.createElement("span",{style:{fontSize:18}},"\uD83D\uDCDE"),/*#__PURE__*/React.createElement("span",{style:{fontSize:18}},"\uD83D\uDCF9"),/*#__PURE__*/React.createElement("span",{style:{fontSize:18}},"\u2261"))),/*#__PURE__*/React.createElement("div",{style:{textAlign:'center',padding:'10px 0',fontSize:11,color:'rgba(255,255,255,0.85)',fontWeight:500}},isWork?'今日 13:25':'今日 13:22'),/*#__PURE__*/React.createElement("div",{style:{flex:1,padding:'0 12px',display:'flex',flexDirection:'column',gap:8,transform:`translateY(${-scrollOffset}px)`,transition:'transform 200ms'}},messages.map((m,i)=>/*#__PURE__*/React.createElement(Message,_extends({key:i},m)))),/*#__PURE__*/React.createElement("div",{style:{background:'#fff',padding:'8px 12px',display:'flex',alignItems:'center',gap:8}},/*#__PURE__*/React.createElement("span",{style:{fontSize:22,color:'#666'}},"\uFF0B"),/*#__PURE__*/React.createElement("span",{style:{fontSize:22,color:'#666'}},"\uD83D\uDCF7"),/*#__PURE__*/React.createElement("div",{style:{flex:1,height:32,background:'#f0f0f0',borderRadius:16,padding:'0 14px',display:'flex',alignItems:'center',fontSize:13,color:'#999'}},"\u30E1\u30C3\u30BB\u30FC\u30B8\u3092\u5165\u529B"),/*#__PURE__*/React.createElement("span",{style:{fontSize:22,color:'#666'}},"\uD83D\uDE0A")),isWork?/*#__PURE__*/React.createElement("div",{style:{height:28,background:'#000',display:'flex',justifyContent:'space-around',alignItems:'center',color:'#fff',fontSize:14}},/*#__PURE__*/React.createElement("span",null,"\u25C0"),/*#__PURE__*/React.createElement("span",null,"\u25CF"),/*#__PURE__*/React.createElement("span",null,"\u25A0")):/*#__PURE__*/React.createElement("div",{style:{height:16,display:'flex',justifyContent:'center',alignItems:'center',background:'#fff'}},/*#__PURE__*/React.createElement("div",{style:{width:120,height:4,borderRadius:2,background:'#0a0a0a'}})));}const PRIVATE_MESSAGES=[{text:'おはよう〜🌸',from:'them'},{text:'今日のお昼どうする？',from:'them'},{text:'パスタ食べたい！',from:'me',readBy:'既読'},{text:'いいね！駅前のお店？',from:'them'},{text:'うん、12時集合で🍝',from:'me',readBy:'既読'},{text:'了解✨',from:'them'}];const WORK_MESSAGES=[{text:'先日の見積書、確認しました。',from:'them'},{text:'修正点を3点送ります。',from:'them'},{text:'承知しました。',from:'me',readBy:'既読'},{text:'本日中に対応いたします。',from:'me',readBy:'既読'},{text:'よろしくお願いします。',from:'them'},{text:'会議は明日14時で。',from:'them'}];function Message({text,from,readBy}){const me=from==='me';return/*#__PURE__*/React.createElement("div",{style:{display:'flex',flexDirection:me?'row-reverse':'row',alignItems:'flex-end',gap:6}},/*#__PURE__*/React.createElement("div",{style:{maxWidth:'70%',background:me?'#85e063':'#fff',color:'#0a0a0a',padding:'8px 12px',borderRadius:16,fontSize:13,lineHeight:1.4}},text),me&&readBy&&/*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:'rgba(255,255,255,0.85)',marginBottom:2}},readBy,/*#__PURE__*/React.createElement("br",null),"13:24"));}function IOSStatusBarLocal(){return/*#__PURE__*/React.createElement("div",{style:{height:36,padding:'8px 22px 0',display:'flex',justifyContent:'space-between',alignItems:'center',fontFamily:'"SF Pro Display", system-ui, sans-serif',fontSize:14,color:'#0a0a0a',fontWeight:600,background:'#fff'}},/*#__PURE__*/React.createElement("span",null,"13:24"),/*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:4,alignItems:'center'}},/*#__PURE__*/React.createElement("svg",{width:"16",height:"11",viewBox:"0 0 16 11"},/*#__PURE__*/React.createElement("rect",{x:"0",y:"7",width:"3",height:"4",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"4.5",y:"5",width:"3",height:"6",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"9",y:"2.5",width:"3",height:"8.5",rx:"0.5",fill:"#0a0a0a"}),/*#__PURE__*/React.createElement("rect",{x:"13.5",y:"0",width:"3",height:"11",rx:"0.5",fill:"#0a0a0a",opacity:"0.3"})),/*#__PURE__*/React.createElement("svg",{width:"16",height:"12",viewBox:"0 0 16 12",style:{marginLeft:4}},/*#__PURE__*/React.createElement("path",{d:"M8 11.5l-1.5-1.5a2.12 2.12 0 0 1 3 0L8 11.5zM5 8.5a4.24 4.24 0 0 1 6 0M2 5.5a8.49 8.49 0 0 1 12 0",stroke:"#0a0a0a",strokeWidth:"1.4",fill:"none",strokeLinecap:"round"})),/*#__PURE__*/React.createElement("div",{style:{marginLeft:4,width:32,height:14,borderRadius:4,background:'#0a0a0a',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,position:'relative'}},"90",/*#__PURE__*/React.createElement("div",{style:{position:'absolute',right:-2,top:4,width:2,height:6,background:'#0a0a0a',borderRadius:1}}))));}function AndroidStatusBar(){return/*#__PURE__*/React.createElement("div",{style:{height:28,padding:'6px 14px 0',display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,fontWeight:600,color:'#fff',background:'rgba(0,0,0,0.2)'}},/*#__PURE__*/React.createElement("span",{style:{display:'flex',gap:6,alignItems:'center'}},"16:27",/*#__PURE__*/React.createElement("span",{style:{fontSize:10}},"\uD83D\uDD15")),/*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:4,alignItems:'center'}},/*#__PURE__*/React.createElement("svg",{width:"14",height:"10",viewBox:"0 0 14 10"},/*#__PURE__*/React.createElement("rect",{x:"0",y:"6",width:"2.5",height:"4",fill:"#fff"}),/*#__PURE__*/React.createElement("rect",{x:"3.5",y:"4",width:"2.5",height:"6",fill:"#fff"}),/*#__PURE__*/React.createElement("rect",{x:"7",y:"2",width:"2.5",height:"8",fill:"#fff"}),/*#__PURE__*/React.createElement("rect",{x:"10.5",y:"0",width:"2.5",height:"10",fill:"#fff"})),/*#__PURE__*/React.createElement("span",{style:{fontSize:11}},"90%")));}Object.assign(window,{LineScreen,AndroidStatusBar});</script>
-<script>// scenes/devices-screen.jsx
-// スマモのデバイス一覧画面（実画像ベース）。
-function DevicesScreen({selectedIndex=-1,selectProgress=0}){// 画像内の device1(2) 行: 縦 約 22%
-// 画像内の device1   行: 縦 約 32%
-const rows=[{y:'20%'},{y:'30%'}];return/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#000'}},/*#__PURE__*/React.createElement("img",{src:typeof window!=='undefined'&&window.__resources&&window.__resources.devicesList||"assets/devices.jpg",alt:"",style:{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'contain',objectPosition:'center'}}),selectedIndex>=0&&rows[selectedIndex]&&/*#__PURE__*/React.createElement(DeviceTapHighlight,{y:rows[selectedIndex].y,progress:selectProgress}));}function DeviceTapHighlight({y,progress}){const glow=Math.min(1,progress*1.5);const flash=Math.max(0,progress-0.6)/0.4;return/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'5%',right:'5%',top:y,height:'7%',marginTop:'-3.5%',borderRadius:14,border:`2px solid rgba(30,136,255,${glow*0.95})`,boxShadow:`0 0 30px rgba(30,136,255,${glow*0.8}), inset 0 0 20px rgba(30,136,255,${glow*0.4})`,background:`rgba(30,136,255,${glow*0.12})`,pointerEvents:'none'}}),progress<0.5&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'50%',top:y,width:38,height:38,marginLeft:-19,marginTop:-19,borderRadius:'50%',background:'rgba(255,255,255,0.3)',border:'2px solid rgba(255,255,255,0.85)',boxShadow:'0 0 14px rgba(255,255,255,0.6)',opacity:1-progress/0.5,pointerEvents:'none'}}),flash>0&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,background:`radial-gradient(ellipse at center ${y}, rgba(30,136,255,${flash*0.5}), transparent 50%)`,pointerEvents:'none'}}));}Object.assign(window,{DevicesScreen});</script>
-<script>// scenes/android-home.jsx
-// Androidホーム画面（実画像ベース）。LINEドックアイコン位置にタップ演出。
-function AndroidHome({tapping=false,tapProgress=0,revealProgress=1}){// 画像サイズ 856x1856。LINEドックアイコン中心: 横 50% / 縦 92%
-return/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#000'}},/*#__PURE__*/React.createElement("img",{src:typeof window!=='undefined'&&window.__resources&&window.__resources.androidHome||"assets/android-home.jpg",alt:"",style:{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'contain',objectPosition:'center',opacity:revealProgress,transform:`scale(${0.96+revealProgress*0.04})`}}),revealProgress<1&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,background:`radial-gradient(circle, rgba(30,136,255,${(1-revealProgress)*0.5}) 0%, transparent 70%)`,pointerEvents:'none'}}),tapping&&/*#__PURE__*/React.createElement(TapHighlight,{x:"50%",y:"86%",size:56,progress:tapProgress}));}Object.assign(window,{AndroidHome});</script>
-<script>// scenes/decor.jsx
-// 共通の装飾要素：電話フレーム、グリッド背景、シールドアイコン、
-// パーティクル、浮遊UIチップ、スキャンライン。
-// ── 電話フレーム ──
-// 内側スクリーンに children を表示
-function PhoneFrame({width=320,height=660,glow=0,screenScale=1,children,tilt=0}){const radius=48;return/*#__PURE__*/React.createElement("div",{style:{width,height,borderRadius:radius,background:'linear-gradient(160deg, #2a2f3c 0%, #0a0c12 100%)',padding:8,boxShadow:`
-        inset 0 0 0 1.5px rgba(255,255,255,0.08),
-        0 30px 80px rgba(0,0,0,0.6),
-        0 0 ${40+glow*80}px rgba(30,136,255,${glow*0.7})
-      `,transform:`rotate(${tilt}deg)`,transformStyle:'preserve-3d',position:'relative'}},/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',borderRadius:radius-6,overflow:'hidden',position:'relative',background:'#000'}},/*#__PURE__*/React.createElement("div",{style:{width:'100%',height:'100%',transform:`scale(${screenScale})`,transformOrigin:'center'}},children),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',width:90,height:24,background:'#000',borderRadius:14,zIndex:100}})));}// ── グリッド背景（サイバー） ──
-function CyberGrid({progress=1,hue=220}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,backgroundImage:`
-        linear-gradient(rgba(30,136,255,0.16) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(30,136,255,0.16) 1px, transparent 1px)
-      `,backgroundSize:'40px 40px',maskImage:`radial-gradient(ellipse at 50% 50%, black ${progress*70}%, transparent ${progress*100}%)`,WebkitMaskImage:`radial-gradient(ellipse at 50% 50%, black ${progress*70}%, transparent ${progress*100}%)`,opacity:progress,pointerEvents:'none'}});}// ── 中央放射光 ──
-function Radial({intensity=1,color='30,136,255',size=800}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'50%',top:'50%',width:size,height:size,transform:'translate(-50%, -50%)',background:`radial-gradient(circle, rgba(${color},${intensity*0.6}) 0%, rgba(${color},0) 60%)`,pointerEvents:'none',mixBlendMode:'screen'}});}// ── シールドアイコン ──
-function Shield({size=80,progress=1,locked=true}){const path="M50 5 L90 18 L90 50 Q90 80 50 95 Q10 80 10 50 L10 18 Z";return/*#__PURE__*/React.createElement("svg",{width:size,height:size,viewBox:"0 0 100 100",style:{filter:`drop-shadow(0 0 ${20*progress}px rgba(30,136,255,${progress*0.9}))`}},/*#__PURE__*/React.createElement("defs",null,/*#__PURE__*/React.createElement("linearGradient",{id:"shieldGrad",x1:"0",y1:"0",x2:"0",y2:"1"},/*#__PURE__*/React.createElement("stop",{offset:"0%",stopColor:"#5da9ff"}),/*#__PURE__*/React.createElement("stop",{offset:"100%",stopColor:"#1e88ff"}))),/*#__PURE__*/React.createElement("path",{d:path,fill:"url(#shieldGrad)",opacity:progress,stroke:"#fff",strokeWidth:"1.5"}),locked?/*#__PURE__*/React.createElement("g",{opacity:progress},/*#__PURE__*/React.createElement("rect",{x:"38",y:"44",width:"24",height:"20",rx:"3",fill:"#fff"}),/*#__PURE__*/React.createElement("path",{d:"M42 44 V36 a8 8 0 0 1 16 0 V44",stroke:"#fff",strokeWidth:"3",fill:"none"})):/*#__PURE__*/React.createElement("g",{opacity:progress},/*#__PURE__*/React.createElement("rect",{x:"38",y:"44",width:"24",height:"20",rx:"3",fill:"#fff"}),/*#__PURE__*/React.createElement("path",{d:"M42 44 V36 a8 8 0 0 1 16 0",stroke:"#fff",strokeWidth:"3",fill:"none"})));}// ── パーティクル爆発 ──
-function ParticleBurst({progress=0,count=24,color='#1e88ff',maxRadius=220}){const particles=React.useMemo(()=>{return Array.from({length:count},(_,i)=>{const angle=i/count*Math.PI*2+i%2*0.1;return{angle,speed:0.7+Math.random()*0.5,size:2+Math.random()*4};});},[count]);if(progress<=0||progress>=1)return null;return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'50%',top:'50%',width:0,height:0,pointerEvents:'none'}},particles.map((p,i)=>{const r=progress*p.speed*maxRadius;const x=Math.cos(p.angle)*r;const y=Math.sin(p.angle)*r;const op=(1-progress)*0.9;return/*#__PURE__*/React.createElement("div",{key:i,style:{position:'absolute',width:p.size,height:p.size,borderRadius:'50%',background:color,left:x,top:y,opacity:op,boxShadow:`0 0 ${p.size*3}px ${color}`}});}));}// ── 浮遊UIチップ（背景の装飾要素） ──
-function FloatingChip({x,y,scale=1,depth=0,kind='shield',delay=0}){const t=useTime();const float=Math.sin((t+delay)*1.5)*6*(1+depth);const blur=depth*2;const opacity=0.45-depth*0.15;const content={shield:/*#__PURE__*/React.createElement(ShieldChip,null),lock:/*#__PURE__*/React.createElement(LockChip,null),code:/*#__PURE__*/React.createElement(CodeChip,null),fingerprint:/*#__PURE__*/React.createElement(FpChip,null),devices:/*#__PURE__*/React.createElement(DevicesChip,null),encrypted:/*#__PURE__*/React.createElement(EncryptedChip,null)}[kind];return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:x,top:y,transform:`translate(-50%, -50%) translateY(${float}px) scale(${scale})`,filter:`blur(${blur}px)`,opacity,pointerEvents:'none'}},content);}function ChipCard({children,accent='#1e88ff'}){return/*#__PURE__*/React.createElement("div",{style:{padding:'10px 14px',background:'rgba(20,30,50,0.7)',backdropFilter:'blur(10px)',border:`1px solid ${accent}40`,borderRadius:10,color:'#cfe3ff',fontFamily:'JetBrains Mono, ui-monospace, monospace',fontSize:11,letterSpacing:'0.06em',boxShadow:`0 0 24px ${accent}30`,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:8}},children);}function ShieldChip(){return/*#__PURE__*/React.createElement(ChipCard,null,/*#__PURE__*/React.createElement(Shield,{size:14,progress:1})," SECURE");}function LockChip(){return/*#__PURE__*/React.createElement(ChipCard,{accent:"#5da9ff"},"\uD83D\uDD12 AES-256");}function CodeChip(){return/*#__PURE__*/React.createElement(ChipCard,null,"0x4F7A \xB7 0x9B2C");}function FpChip(){return/*#__PURE__*/React.createElement(ChipCard,null,"\u25CF \u25CF \u25CF \u25CF \u25CF \u25CF");}function DevicesChip(){return/*#__PURE__*/React.createElement(ChipCard,{accent:"#7ab8ff"},"DEVICE 01 \xB7 02 \xB7 03");}function EncryptedChip(){return/*#__PURE__*/React.createElement(ChipCard,null,"ENCRYPTED \u2713");}// ── スキャンライン ──
-function Scanlines({opacity=0.08}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,backgroundImage:`repeating-linear-gradient(
-        0deg,
-        rgba(255,255,255,${opacity}) 0px,
-        rgba(255,255,255,${opacity}) 1px,
-        transparent 1px,
-        transparent 4px
-      )`,pointerEvents:'none',mixBlendMode:'overlay'}});}// ── 同心リング波 ──
-function RingPulse({progress=0,color='30,136,255',maxRadius=380}){if(progress<=0||progress>=1)return null;const r=progress*maxRadius;const op=(1-progress)*0.7;return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'50%',top:'50%',width:r*2,height:r*2,marginLeft:-r,marginTop:-r,borderRadius:'50%',border:`2px solid rgba(${color},${op})`,boxShadow:`0 0 30px rgba(${color},${op*0.7}), inset 0 0 30px rgba(${color},${op*0.5})`,pointerEvents:'none'}});}// ── キャッチコピー ──
-function Caption({text,accent=false,size=36}){const{localTime,duration}=useSprite();const inDur=0.35;const outDur=0.35;const exitStart=duration-outDur;let opacity=1,ty=0;if(localTime<inDur){const t=Easing.easeOutCubic(localTime/inDur);opacity=t;ty=(1-t)*14;}else if(localTime>exitStart){const t=Easing.easeInCubic((localTime-exitStart)/outDur);opacity=1-t;ty=-t*8;}return/*#__PURE__*/React.createElement("div",{style:{opacity,transform:`translateY(${ty}px)`,textAlign:'center',fontFamily:'"Hiragino Sans", "Noto Sans JP", "SF Pro Display", system-ui, sans-serif',fontWeight:700,fontSize:size,letterSpacing:'0.02em',color:accent?'#5da9ff':'#fff',textShadow:accent?'0 0 20px rgba(30,136,255,0.7)':'0 2px 8px rgba(0,0,0,0.5)',lineHeight:1.3}},text);}Object.assign(window,{PhoneFrame,CyberGrid,Radial,Shield,ParticleBurst,FloatingChip,RingPulse,Scanlines,Caption});</script>
-<script>// scenes/security-break.jsx
-// 電卓→デバイス画面の間に挟む「セキュリティ突破」演出。
-// ロックアイコン → 解錠 → グリーンチェック → 突破フラッシュ。
-function SecurityBreak({progress=0}){// progress 0..1
-// 0–0.25: ロック（閉）登場、シールドリング描画
-// 0.25–0.5: パスコード認証中（ドット流れる）
-// 0.5–0.7: ロック解除アニメーション（南京錠の柱がポップ）
-// 0.7–1.0: グリーンチェック → 突破フラッシュ
-if(progress<=0||progress>=1)return null;const phase=progress;const lockShow=phase<0.7?Math.min(1,phase/0.15):Math.max(0,1-(phase-0.7)/0.15);const unlockAnim=Math.max(0,Math.min(1,(phase-0.45)/0.25));const checkShow=phase>0.65?Math.min(1,(phase-0.65)/0.15):0;const checkExit=phase>0.92?(phase-0.92)/0.08:0;const ringScan=Math.min(1,phase/0.5);const finalFlash=phase>0.7?Math.min(1,(phase-0.7)/0.1)-Math.max(0,(phase-0.85)/0.15):0;return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',zIndex:70,background:`radial-gradient(circle, rgba(5,12,24,${0.5+phase*0.3}) 0%, rgba(5,12,24,${0.2+phase*0.4}) 50%, transparent 80%)`}},/*#__PURE__*/React.createElement("div",{style:{position:'relative',width:220,height:220,display:'flex',alignItems:'center',justifyContent:'center'}},/*#__PURE__*/React.createElement("svg",{width:"220",height:"220",viewBox:"0 0 220 220",style:{position:'absolute',inset:0}},/*#__PURE__*/React.createElement("defs",null,/*#__PURE__*/React.createElement("linearGradient",{id:"ringGrad",x1:"0",y1:"0",x2:"1",y2:"1"},/*#__PURE__*/React.createElement("stop",{offset:"0%",stopColor:"#5da9ff"}),/*#__PURE__*/React.createElement("stop",{offset:"100%",stopColor:"#1e88ff"}))),/*#__PURE__*/React.createElement("circle",{cx:"110",cy:"110",r:"100",fill:"none",stroke:"rgba(30,136,255,0.3)",strokeWidth:"1.5"}),/*#__PURE__*/React.createElement("circle",{cx:"110",cy:"110",r:"100",fill:"none",stroke:"url(#ringGrad)",strokeWidth:"3",strokeDasharray:`${ringScan*628} 628`,transform:"rotate(-90 110 110)",style:{filter:'drop-shadow(0 0 8px #1e88ff)'}}),/*#__PURE__*/React.createElement("circle",{cx:"110",cy:"110",r:"80",fill:"none",stroke:"rgba(93,169,255,0.5)",strokeWidth:"1",strokeDasharray:"3 4",style:{transformOrigin:'110px 110px',animation:'smamoSpinSlow 4s linear infinite'}})),/*#__PURE__*/React.createElement("svg",{width:"120",height:"120",viewBox:"0 0 120 120",style:{position:'relative',opacity:lockShow,filter:`drop-shadow(0 0 ${20*lockShow}px rgba(30,136,255,${lockShow*0.9}))`}},/*#__PURE__*/React.createElement("defs",null,/*#__PURE__*/React.createElement("linearGradient",{id:"lockGrad",x1:"0",y1:"0",x2:"0",y2:"1"},/*#__PURE__*/React.createElement("stop",{offset:"0%",stopColor:"#5da9ff"}),/*#__PURE__*/React.createElement("stop",{offset:"100%",stopColor:"#1e88ff"}))),/*#__PURE__*/React.createElement("path",{d:"M60 10 L100 22 L100 56 Q100 88 60 108 Q20 88 20 56 L20 22 Z",fill:"url(#lockGrad)",stroke:"#fff",strokeWidth:"1.5"}),/*#__PURE__*/React.createElement("rect",{x:"44",y:"56",width:"32",height:"28",rx:"4",fill:"#fff"}),/*#__PURE__*/React.createElement("path",{d:unlockAnim<1?`M48 56 V48 a12 12 0 0 1 24 0 V56`:`M48 56 V44 a12 12 0 0 1 24 -4 V42`,fill:"none",stroke:"#fff",strokeWidth:"4",strokeLinecap:"round",transform:`translate(0 ${-unlockAnim*8}) rotate(${unlockAnim*12} 60 50)`}),/*#__PURE__*/React.createElement("circle",{cx:"60",cy:"68",r:"3",fill:"#1e88ff"}),/*#__PURE__*/React.createElement("rect",{x:"59",y:"68",width:"2",height:"8",fill:"#1e88ff"})),checkShow>0&&/*#__PURE__*/React.createElement("svg",{width:"120",height:"120",viewBox:"0 0 120 120",style:{position:'absolute',opacity:Math.max(0,checkShow-checkExit),transform:`scale(${0.6+checkShow*0.5})`,filter:`drop-shadow(0 0 30px rgba(62,224,127,${checkShow*0.9}))`}},/*#__PURE__*/React.createElement("circle",{cx:"60",cy:"60",r:"46",fill:"#3ee07f",opacity:"0.95"}),/*#__PURE__*/React.createElement("path",{d:"M40 62 L54 76 L82 46",fill:"none",stroke:"#0a2818",strokeWidth:"8",strokeLinecap:"round",strokeLinejoin:"round",strokeDasharray:"80",strokeDashoffset:80-Math.min(1,checkShow*1.4)*80})),phase>0.2&&phase<0.7&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',width:200,height:200,animation:'smamoSpin 1.5s linear infinite'}},Array.from({length:6}).map((_,i)=>{const a=i/6*Math.PI*2;const x=Math.cos(a)*100+100;const y=Math.sin(a)*100+100;return/*#__PURE__*/React.createElement("div",{key:i,style:{position:'absolute',left:x,top:y,width:6,height:6,borderRadius:'50%',background:'#5da9ff',boxShadow:'0 0 10px #1e88ff',marginLeft:-3,marginTop:-3,opacity:0.4+i/6*0.6}});}))),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:0,right:0,bottom:'24%',textAlign:'center',color:phase<0.7?'#5da9ff':'#3ee07f',fontFamily:'JetBrains Mono, ui-monospace, monospace',fontSize:13,letterSpacing:'0.25em',textTransform:'uppercase',fontWeight:700,textShadow:phase<0.7?'0 0 12px rgba(30,136,255,0.9)':'0 0 12px rgba(62,224,127,0.9)',opacity:phase>0.05&&phase<0.95?1:0}},phase<0.45?'AUTHENTICATING…':phase<0.65?'VERIFYING KEY…':'ACCESS GRANTED'),finalFlash>0&&/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,background:`radial-gradient(circle, rgba(255,255,255,${finalFlash*0.85}) 0%, rgba(62,224,127,${finalFlash*0.5}) 25%, rgba(30,136,255,${finalFlash*0.3}) 50%, transparent 70%)`}}));}Object.assign(window,{SecurityBreak});</script>
-<script>// scenes/timeline.jsx
-// スマモのストーリー（v3：18秒・1:1・ループ・全体スロー化）
-//
-// セグメント（秒）:
-//  0.0–3.0   S1 プライベートLINE（あいちゃん）
-//  3.0–4.4   S2 戻る → iPhoneホーム遷移
-//  4.4–6.4   S3 iOSホーム → 電卓アプリにタップ
-//  6.4–8.6   S4 電卓を普通に使う（2+2=4）
-//  8.6–10.4  S5 AC×3 → パスワード入力
-// 10.4–11.6  S6 シールドが一瞬光る（電卓→デバイス遷移）
-// 11.6–13.4  S7 デバイス一覧 → device1(2) を選択
-// 13.4–15.4  S8 Androidホーム解放 → LINEタップ
-// 15.4–17.4  S9 仕事用LINE
-// 17.4–18.0  S10 ループ繋ぎ
-const T={S1:[0.0,3.0],S2:[3.0,4.4],S3:[4.4,6.4],S4:[6.4,8.6],S5:[8.6,10.4],S6:[10.4,11.6],S7:[11.6,13.4],S8:[13.4,15.4],S9:[15.4,17.4],S10:[17.4,18.0]};function inSeg(time,[a,b]){return time>=a&&time<b;}function localProgress(time,[a,b]){return Math.max(0,Math.min(1,(time-a)/(b-a)));}const CALC_TAPS=[// S4: 2+2=4 を普通に押す
-{t:6.80,key:'2'},{t:7.30,key:'+'},{t:7.80,key:'2'},{t:8.30,key:'='},// S5: AC×3 → パスワード
-{t:8.70,key:'AC'},{t:8.95,key:'AC'},{t:9.20,key:'AC'},{t:9.55,key:'1'},{t:9.80,key:'9'},{t:10.05,key:'8'},{t:10.25,key:'4'}];function activeKeyAt(time,dur=0.18){for(const tap of CALC_TAPS){if(time>=tap.t&&time<tap.t+dur)return tap.key;}return null;}function calcDisplay(time){if(time<6.80)return'0';if(time<7.30)return'2';if(time<7.80)return'2';// + 押した直後も 2 のまま
-if(time<8.30)return'2';// 2 を押す
-if(time<8.70)return'4';// = で答え
-return'0';}function calcOperator(time){// 表示中の演算子（薄く右上に見せる）
-if(time>=7.30&&time<8.30)return'+';return null;}function SmamoTimeline(){const time=useTime();const inS1=inSeg(time,T.S1);const inS2=inSeg(time,T.S2);const inS3=inSeg(time,T.S3);const inS4=inSeg(time,T.S4);const inS5=inSeg(time,T.S5);const inS6=inSeg(time,T.S6);const inS7=inSeg(time,T.S7);const inS8=inSeg(time,T.S8);const inS9=inSeg(time,T.S9);const inS10=inSeg(time,T.S10);const p1=localProgress(time,T.S1);const p2=localProgress(time,T.S2);const p3=localProgress(time,T.S3);const p5=localProgress(time,T.S5);const p6=localProgress(time,T.S6);const p7=localProgress(time,T.S7);const p8=localProgress(time,T.S8);const p10=localProgress(time,T.S10);// ── 画面の可視性 ──
-let privateLineOpacity=0,privateLineScale=1;if(inS1){privateLineOpacity=p1<0.08?p1/0.08:1;if(p1>0.92)privateLineOpacity=1-(p1-0.92)/0.08*0.3;}else if(inS2&&p2<0.4){privateLineOpacity=Math.max(0,1-p2/0.4);privateLineScale=1-p2/0.4*0.06;}else if(inS10){privateLineOpacity=Math.min(1,p10*1.6);privateLineScale=0.96+p10*0.04;}let iosHomeOpacity=0,iosHomeScale=1;if(inS2&&p2>0.3){const t=Easing.easeOutCubic((p2-0.3)/0.7);iosHomeOpacity=Math.min(1,t*1.6);iosHomeScale=1.06-t*0.06;}else if(inS3){iosHomeOpacity=1;if(p3>0.7){const z=(p3-0.7)/0.3;iosHomeScale=1+z*0.08;if(p3>0.88)iosHomeOpacity=Math.max(0,1-(p3-0.88)/0.12);}}let calcOpacity=0,calcScale=1;if(inS3&&p3>0.85){calcOpacity=(p3-0.85)/0.15;calcScale=0.94+(p3-0.85)/0.15*0.06;}else if(inS4||inS5){calcOpacity=1;}else if(inS6&&p6<0.5){calcOpacity=Math.max(0,1-p6/0.5);calcScale=1+p6/0.5*0.04;}let devicesOpacity=0,devicesScale=1;if(inS6&&p6>0.55){devicesOpacity=Math.min(1,(p6-0.55)/0.35);devicesScale=0.96+devicesOpacity*0.04;}else if(inS7){devicesOpacity=p7<0.8?1:Math.max(0,1-(p7-0.8)/0.2);}let androidOpacity=0,androidReveal=0,androidScale=1;if(inS7&&p7>0.7){androidOpacity=Math.min(1,(p7-0.7)/0.3);androidReveal=androidOpacity;androidScale=0.96+androidOpacity*0.04;}else if(inS8){androidOpacity=1;androidReveal=1;if(p8>0.8){const z=(p8-0.8)/0.2;androidOpacity=Math.max(0,1-z);}}let workLineOpacity=0,workLineScale=1;if(inS8&&p8>0.88){workLineOpacity=Math.min(1,(p8-0.88)/0.12);workLineScale=0.96+workLineOpacity*0.04;}else if(inS9){workLineOpacity=1;if(p10>0)workLineOpacity=1;}else if(inS10){workLineOpacity=Math.max(0,1-p10*1.6);}// ── タップ ──
-const iosTapping=inS3&&p3>0.3;const iosTapProgress=iosTapping?Math.min(1,(p3-0.3)/0.55):0;const deviceSelectedIdx=inS7&&p7>0.25&&p7<0.85?0:-1;const deviceSelectProgress=inS7?Math.min(1,Math.max(0,(p7-0.25)/0.45)):0;const androidTapping=inS8&&p8>0.35&&p8<0.95;const androidTapProgress=inS8?Math.min(1,Math.max(0,(p8-0.35)/0.5)):0;const activeKey=activeKeyAt(time);const acHighlight=inS5&&p5<0.4&&Math.floor((time-T.S5[0])*8)%2===0;const display=calcDisplay(time);// ── シールド一瞬光る演出（テキストなし、画面切替なし） ──
-// S6全体で：シールドアイコンが電卓上に重なって光る → フェードアウト
-const shieldFlash=inS6?Math.sin(p6*Math.PI):0;// フレームグロー
-let frameGlow=0;if(inS5&&p5>0.5)frameGlow=(p5-0.5)/0.5*0.5;else if(inS6)frameGlow=Math.sin(p6*Math.PI)*0.9;else if(inS7&&p7<0.3)frameGlow=(1-p7/0.3)*0.4;// 背景
-let cyber=0;if(inS5)cyber=p5*0.4;else if(inS6)cyber=0.4+Math.sin(p6*Math.PI)*0.3;else if(inS7)cyber=Math.max(0,0.5-p7*0.5);return/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement(BackgroundLayer,{cyber:cyber}),/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:'50%',top:'50%',transform:`translate(-50%, -50%)`,zIndex:5}},/*#__PURE__*/React.createElement(PhoneFrame,{width:310,height:640,glow:frameGlow},/*#__PURE__*/React.createElement("div",{style:{position:'relative',width:'100%',height:'100%',background:'#000'}},privateLineOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:privateLineOpacity,scale:privateLineScale},/*#__PURE__*/React.createElement(LineScreen,{mode:"private"})),iosHomeOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:iosHomeOpacity,scale:iosHomeScale},/*#__PURE__*/React.createElement(IOSHome,{tapping:iosTapping,tapProgress:iosTapProgress})),calcOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:calcOpacity,scale:calcScale},/*#__PURE__*/React.createElement(CalcScreen,{display:display,activeKey:activeKey,acHighlight:acHighlight,operator:calcOperator(time)})),devicesOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:devicesOpacity,scale:devicesScale},/*#__PURE__*/React.createElement(DevicesScreen,{selectedIndex:deviceSelectedIdx,selectProgress:deviceSelectProgress})),androidOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:androidOpacity,scale:androidScale},/*#__PURE__*/React.createElement(AndroidHome,{tapping:androidTapping,tapProgress:androidTapProgress,revealProgress:androidReveal})),workLineOpacity>0&&/*#__PURE__*/React.createElement(ScreenLayer,{opacity:workLineOpacity,scale:workLineScale},/*#__PURE__*/React.createElement(LineScreen,{mode:"work"})),shieldFlash>0.05&&/*#__PURE__*/React.createElement(ShieldFlash,{intensity:shieldFlash})))),inS6&&p6>0.3&&p6<0.85&&/*#__PURE__*/React.createElement(RingPulse,{progress:(p6-0.3)/0.55,maxRadius:420}),/*#__PURE__*/React.createElement(CaptionLayer,null));}// 画面に被せる、シールドが一瞬光るだけの演出
-function ShieldFlash({intensity=1}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none',background:`radial-gradient(circle, rgba(30,136,255,${intensity*0.35}) 0%, rgba(30,136,255,${intensity*0.15}) 40%, transparent 70%)`,zIndex:50}},/*#__PURE__*/React.createElement(Shield,{size:130+intensity*30,progress:intensity,locked:false}));}function ScreenLayer({opacity,scale=1,children}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,opacity,transform:`scale(${scale})`,transformOrigin:'center'}},children);}function BackgroundLayer({cyber}){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,overflow:'hidden'}},/*#__PURE__*/React.createElement("div",{style:{position:'absolute',inset:0,background:'radial-gradient(ellipse at 50% 50%, #0a1428 0%, #050810 80%)'}}),/*#__PURE__*/React.createElement(CyberGrid,{progress:cyber*0.7}),/*#__PURE__*/React.createElement(Radial,{intensity:cyber*0.5,size:1000}));}function CaptionLayer(){return/*#__PURE__*/React.createElement("div",{style:{position:'absolute',left:0,right:0,bottom:56,zIndex:20,display:'flex',justifyContent:'center',pointerEvents:'none'}},/*#__PURE__*/React.createElement(Sprite,{start:0.5,end:2.8},/*#__PURE__*/React.createElement(Caption,{text:"\u3075\u3060\u3093\u4F7F\u3044\u306E\u3001\u3044\u3064\u3082\u306E\u30B9\u30DE\u30DB\u3002",size:28})),/*#__PURE__*/React.createElement(Sprite,{start:4.7,end:6.4},/*#__PURE__*/React.createElement(Caption,{text:"\u3067\u3082\u3001\u96FB\u5353\u306B\u306F\u79D8\u5BC6\u304C\u3042\u308B\u3002",size:28,accent:true})),/*#__PURE__*/React.createElement(Sprite,{start:8.8,end:10.4},/*#__PURE__*/React.createElement(Caption,{text:"\u96FB\u5353\u753B\u9762\u3067\u30D1\u30B9\u30EF\u30FC\u30C9\u3092\u5165\u529B\u3002",size:28,accent:true})),/*#__PURE__*/React.createElement(Sprite,{start:11.8,end:13.4},/*#__PURE__*/React.createElement(Caption,{text:"\u3042\u306A\u305F\u3060\u3051\u306E\u3001\u3082\u3046\u4E00\u53F0\u3078\u3002",size:30})),/*#__PURE__*/React.createElement(Sprite,{start:13.6,end:15.4},/*#__PURE__*/React.createElement(Caption,{text:"\u4ED5\u4E8B\u7528 Android\u3001\u8D77\u52D5\u3002",size:28})),/*#__PURE__*/React.createElement(Sprite,{start:15.6,end:17.4},/*#__PURE__*/React.createElement(Caption,{text:"1\u53F0\u3067\u30012\u3064\u306ELINE\u3002",size:32,accent:true})));}Object.assign(window,{SmamoTimeline});</script>
-<script>function mountApp(){function App(){return/*#__PURE__*/React.createElement(Stage,{width:390,height:680,duration:18,background:"transparent",showControls:false,persistKey:"smamo-hero"},/*#__PURE__*/React.createElement(SmamoTimeline,{variant:"A"}));}ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App,null));}if(document.readyState==='complete')mountApp();else window.addEventListener('load',mountApp);</script>
+
+<script type="text/babel">
+// ── Core Animation Framework ──
+const Easing = {
+  easeInCubic:  (t) => t * t * t,
+  easeOutCubic: (t) => (--t) * t * t + 1,
+};
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const PLAYBACK_RATE = 1.5;
+const PULSE_COUNT = 3;
+const SCENE_TRIM_SECONDS = 0.2;
+const SCENE_TRIM_THRESHOLDS = [9.3, 11.3, 18.0, 27.5, 32.0, 38.6, 44.8, 51.8];
+const EXTRA_SCENE_TRIM_SECONDS = 0.2;
+const EXTRA_SCENE_TRIM_THRESHOLDS = [9.3, 11.3, 18.0, 27.5, 44.8, 51.8, 52.8];
+const SELECTIVE_SCENE_TRIM_SECONDS = 0.4;
+const SELECTIVE_SCENE_TRIM_THRESHOLDS = [9.3, 27.5];
+const IOS_HOME_LEAD_TRIM_SECONDS = 0.3;
+const IOS_HOME_LEAD_TRIM_THRESHOLD = 11.3;
+const trimTimelineTime = (seconds) => {
+  let adjusted = seconds;
+  for (const threshold of SCENE_TRIM_THRESHOLDS) {
+    if (seconds >= threshold) adjusted -= SCENE_TRIM_SECONDS;
+  }
+  for (const threshold of EXTRA_SCENE_TRIM_THRESHOLDS) {
+    if (seconds >= threshold) adjusted -= EXTRA_SCENE_TRIM_SECONDS;
+  }
+  for (const threshold of SELECTIVE_SCENE_TRIM_THRESHOLDS) {
+    if (seconds >= threshold) adjusted -= SELECTIVE_SCENE_TRIM_SECONDS;
+  }
+  if (seconds >= IOS_HOME_LEAD_TRIM_THRESHOLD) adjusted -= IOS_HOME_LEAD_TRIM_SECONDS;
+  return adjusted;
+};
+const scaleTime = (seconds) => trimTimelineTime(seconds) / PLAYBACK_RATE;
+const PULSE_DURATION = 1.45 * (PULSE_COUNT / 2);
+const IOS_PULSE_START = 0.0;
+const IOS_PULSE_SPEED = 3.35;
+const ANDROID_PULSE_START = 0.215;
+const ANDROID_PULSE_SPEED = 3.1;
+
+const TimelineContext = React.createContext({ time: 0, duration: 10, playing: false });
+const useTime = () => React.useContext(TimelineContext).time;
+const useTimeline = () => React.useContext(TimelineContext);
+
+function Stage({
+  width = 1280,
+  height = 720,
+  duration = 10,
+  background = '#f6f4ef',
+  loop = true,
+  autoplay = true,
+  persistKey = 'animstage',
+  children,
+}) {
+  const [time, setTime] = React.useState(() => {
+    try {
+      const v = parseFloat(localStorage.getItem(persistKey + ':t') || '0');
+      return isFinite(v) ? clamp(v, 0, duration) : 0;
+    } catch { return 0; }
+  });
+  const [playing, setPlaying] = React.useState(autoplay);
+  const [scale, setScale] = React.useState(1);
+
+  const stageRef = React.useRef(null);
+  const canvasRef = React.useRef(null);
+  const rafRef = React.useRef(null);
+  const lastTsRef = React.useRef(null);
+
+  React.useEffect(() => {
+    try { localStorage.setItem(persistKey + ':t', String(time)); } catch {}
+  }, [time, persistKey]);
+
+  React.useEffect(() => {
+    if (!stageRef.current) return;
+    const el = stageRef.current;
+    const measure = () => {
+      const s = Math.min(el.clientWidth / width, el.clientHeight / height);
+      setScale(Math.max(0.05, s));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [width, height]);
+
+  React.useEffect(() => {
+    if (!playing) {
+      lastTsRef.current = null;
+      return;
+    }
+    const step = (ts) => {
+      if (lastTsRef.current == null) lastTsRef.current = ts;
+      const dt = (ts - lastTsRef.current) / 1000;
+      lastTsRef.current = ts;
+      setTime((t) => {
+        let next = t + dt;
+        if (next >= duration) {
+          if (loop) next = next % duration;
+          else { next = duration; setPlaying(false); }
+        }
+        return next;
+      });
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      lastTsRef.current = null;
+    };
+  }, [playing, duration, loop]);
+
+  const ctxValue = React.useMemo(
+    () => ({ time, duration, playing, setTime, setPlaying }),
+    [time, duration, playing]
+  );
+
+  return (
+    <div
+      ref={stageRef}
+      style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center',
+        background: 'transparent',
+      }}
+    >
+      <div style={{
+        flex: 1,
+        width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden',
+        minHeight: 0,
+      }}>
+        <div
+          ref={canvasRef}
+          style={{
+            width, height,
+            background,
+            position: 'relative',
+            transform: `scale(${scale})`,
+            transformOrigin: 'center',
+            flexShrink: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <TimelineContext.Provider value={ctxValue}>
+            {children}
+            <DevControls />
+          </TimelineContext.Provider>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DevControls() {
+  const { time, duration, playing, setTime, setPlaying } = useTimeline();
+  const [visible, setVisible] = React.useState(() => window.self === window.top);
+
+  React.useEffect(() => {
+    setVisible(window.self === window.top);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      left: 12,
+      right: 12,
+      bottom: 12,
+      zIndex: 999,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      padding: '10px 12px',
+      borderRadius: 14,
+      background: 'rgba(15, 15, 18, 0.78)',
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.22)',
+      color: '#fff',
+      fontFamily: '"SF Pro Display", system-ui, sans-serif',
+    }}>
+      <button
+        type="button"
+        onClick={() => setPlaying(!playing)}
+        style={devButtonStyle}
+      >
+        {playing ? 'Pause' : 'Play'}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setTime(0);
+          setPlaying(false);
+        }}
+        style={devButtonStyle}
+      >
+        Reset
+      </button>
+      <input
+        type="range"
+        min="0"
+        max={duration}
+        step="0.01"
+        value={time}
+        onChange={(e) => setTime(parseFloat(e.target.value))}
+        style={{ flex: 1 }}
+      />
+      <div style={{
+        minWidth: 84,
+        textAlign: 'right',
+        fontSize: 12,
+        fontVariantNumeric: 'tabular-nums',
+        opacity: 0.9,
+      }}>
+        {time.toFixed(1)} / {duration.toFixed(1)}s
+      </div>
+    </div>
+  );
+}
+
+const devButtonStyle = {
+  appearance: 'none',
+  border: '1px solid rgba(255,255,255,0.18)',
+  background: 'rgba(255,255,255,0.1)',
+  color: '#fff',
+  borderRadius: 10,
+  padding: '8px 12px',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+// ── scenes/calc-screen.jsx ──
+const CALC_KEYS = [
+  ['⌫', 'AC', '%', '÷'],
+  ['7', '8', '9', '×'],
+  ['4', '5', '6', '−'],
+  ['1', '2', '3', '+'],
+  ['+/−', '0', '·', '='],
+];
+
+function CalcKey({ label, isOp, active, highlight, scale = 1, subtle = false }) {
+  const buttonSize = 52;
+
+  const isOrange = ['÷', '×', '−', '+', '='].includes(label);
+  const isLightGray = ['AC', 'C', '⌫', '+/−', '+/-', '%'].includes(label);
+
+  let baseBg = '#333333';
+  let baseColor = '#ffffff';
+
+  if (isOrange) {
+    baseBg = '#ff9f0a';
+    baseColor = '#ffffff';
+  } else if (isLightGray) {
+    baseBg = '#a5a5a5';
+    baseColor = '#000000';
+  }
+
+  if (active || highlight) {
+    if (isOrange) {
+      baseBg = '#f2c179';
+    } else if (isLightGray) {
+      baseBg = '#e5e5e5';
+    } else {
+      baseBg = '#737373';
+    }
+  }
+
+  let fontSize = 20;
+  if (label === 'AC') {
+    fontSize = 16;
+  } else if (label === '+/−' || label === '+/-') {
+    fontSize = 14;
+  } else if (label === '⌫') {
+    fontSize = 18;
+  }
+
+  return (
+    <div style={{
+      width: buttonSize, height: buttonSize,
+      borderRadius: '50%',
+      background: baseBg,
+      color: baseColor,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: '"SF Pro Display", -apple-system, system-ui, sans-serif',
+      fontSize: fontSize,
+      fontWeight: 500,
+      transform: `scale(${scale})`,
+      opacity: subtle ? 0.55 : 1,
+      transition: 'background 80ms linear',
+    }}>
+      {label}
+    </div>
+  );
+}
+
+function CalcScreen({ display = '0', activeKey = null, acHighlight = false, dim = 0, operator = null }) {
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      background: '#000000',
+      display: 'flex', flexDirection: 'column',
+      position: 'relative',
+      filter: dim > 0 ? `brightness(${1 - dim * 0.5})` : 'none',
+    }}>
+      <IOSStatusBarDark />
+
+      <div style={{
+        textAlign: 'center', padding: '14px 0 8px',
+        fontFamily: '"SF Pro Display", system-ui, sans-serif',
+        fontSize: 16, color: '#a5a5a5',
+      }}>電卓</div>
+
+      <div style={{
+        flex: 1,
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+        padding: '0 32px 20px',
+        fontFamily: '"SF Pro Display", system-ui, sans-serif',
+        fontSize: 80, fontWeight: 300,
+        color: '#ffffff',
+        lineHeight: 1,
+        position: 'relative',
+      }}>
+        {operator && (
+          <div style={{
+            position: 'absolute', right: 32, top: 28,
+            fontSize: 26, color: '#ff9f0a',
+            fontWeight: 400,
+          }}>{operator}</div>
+        )}
+        {display}
+      </div>
+
+      <div style={{
+        padding: '0 22px 44px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 10,
+        justifyItems: 'center',
+      }}>
+        {CALC_KEYS.flat().map((k, i) => {
+          const isOp = ['⌫', 'AC', '%', '÷', '×', '−', '+', '='].includes(k);
+          const active = activeKey === k;
+          const highlight = (k === 'AC' && acHighlight);
+          return (
+            <CalcKey
+              key={i}
+              label={k}
+              isOp={isOp}
+              active={active}
+              highlight={highlight}
+              scale={active ? 0.92 : 1}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SignalDots({ color = '#ffffff' }) {
+  return (
+    <svg width="17" height="11" viewBox="0 0 17 11" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <rect x="0" y="8" width="3" height="3" rx="1" fill={color}/>
+      <rect x="4.5" y="5.5" width="3" height="5.5" rx="1" fill={color}/>
+      <rect x="9" y="3" width="3" height="8" rx="1" fill={color}/>
+      <rect x="13.5" y="0" width="3" height="11" rx="1" fill={color} opacity="0.3"/>
+    </svg>
+  );
+}
+function WifiIcon({ color = '#ffffff' }) {
+  return (
+    <svg width="18" height="13" viewBox="0 0 18 13" style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 4, overflow: 'visible' }} aria-hidden="true">
+      <path d="M9 10.5a1.35 1.35 0 1 1 0-2.7 1.35 1.35 0 0 1 0 2.7Zm-3.55-3.3a5.05 5.05 0 0 1 7.1 0 .78.78 0 1 0 1.1-1.1 6.6 6.6 0 0 0-9.3 0 .78.78 0 1 0 1.1 1.1Zm-2.9-2.95a9.2 9.2 0 0 1 12.9 0 .78.78 0 1 0 1.1-1.1 10.75 10.75 0 0 0-15.1 0 .78.78 0 0 0 1.1 1.1Z" fill={color} />
+    </svg>
+  );
+}
+function BatteryPill({ pct = 90, color = '#ffffff' }) {
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      marginLeft: 4,
+      verticalAlign: 'middle',
+    }}>
+      <div style={{
+        width: 25, height: 12,
+        border: `1.1px solid ${color}`,
+        borderRadius: 3.5,
+        padding: '1px',
+        boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
+        position: 'relative',
+        background: 'transparent',
+      }}>
+        <div style={{
+          width: `${pct}%`,
+          height: '100%',
+          background: color,
+          borderRadius: 1.5,
+          overflow: 'hidden',
+        }}/>
+        <div style={{
+          position: 'absolute', right: -2.5, top: 3.2, width: 1.5, height: 4,
+          background: color,
+          borderRadius: '0 1px 1px 0',
+          opacity: 0.8,
+        }}/>
+      </div>
+    </div>
+  );
+}
+
+// ── scenes/ios-home.jsx ──
+function IOSHome({ tapping = false, tapProgress = 0 }) {
+  const imgSrc = window.__resources.iosHome || "assets/ios-home.jpg";
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+      background: 'transparent',
+    }}>
+      <img src={imgSrc} alt="" style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        objectFit: 'cover',
+        objectPosition: 'center',
+      }}/>
+
+      {tapping && (
+        <TapHighlight
+          x="84%" y="49%"
+          size={58}
+          progress={tapProgress}
+        />
+      )}
+    </div>
+  );
+}
+
+function TapHighlight({ x, y, size = 68, progress = 0 }) {
+  const ringBorder = '5px solid rgba(0,102,235,0.98)';
+  const ringShadow = '0 0 22px rgba(0,102,235,0.62)';
+  const pulseSpan = 1 / PULSE_COUNT;
+  const pulseProgresses = Array.from({ length: PULSE_COUNT }, (_, index) => {
+    const start = index * pulseSpan;
+    const end = start + pulseSpan;
+    if (progress < start || progress >= end) return null;
+    return (progress - start) / pulseSpan;
+  });
+  
+  return (
+    <>
+      {pulseProgresses.map((pulseProgress, index) => pulseProgress == null ? null : (
+        <div key={index} style={{
+          position: 'absolute',
+          left: x, top: y,
+          width: size, height: size,
+          marginLeft: -size / 2, marginTop: -size / 2,
+          borderRadius: '50%',
+          border: ringBorder,
+          boxShadow: ringShadow,
+          transform: `scale(${0.8 + pulseProgress * 0.9})`,
+          opacity: 1 - pulseProgress,
+          pointerEvents: 'none',
+        }}/>
+      ))}
+    </>
+  );
+}
+
+// ── scenes/line-screens.jsx ──
+function LineScreen({ mode = 'private', scrollOffset = 0 }) {
+  const isWork = mode === 'work';
+  const messages = isWork ? WORK_MESSAGES : PRIVATE_MESSAGES;
+  const title = isWork ? '田中部長' : 'あいちゃん';
+  const subtitle = '';
+  const textColor = '#0a0a0a';
+  const screenBackground = isWork ? '#a7b3c0' : '#7a93b4';
+  const screenBackgroundImage = isWork
+    ? 'none'
+    : 'linear-gradient(180deg, #8ba3c2 0%, #768fae 100%)';
+
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      background: screenBackground,
+      backgroundImage: screenBackgroundImage,
+      position: 'relative',
+      overflow: 'hidden',
+      fontFamily: '"Hiragino Sans", "Noto Sans JP", system-ui, sans-serif',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {isWork ? <IOSStatusBarDark/> : <IOSStatusBarLocal/>}
+
+      <div style={{
+        background: 'transparent',
+        padding: '8px 14px 12px',
+        display: 'flex', alignItems: 'center', gap: 10,
+        color: textColor,
+      }}>
+        <svg width="22" height="22" viewBox="0 0 22 22">
+          <path d="M14 4l-7 7 7 7" stroke={textColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        </svg>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 11, opacity: 0.85 }}>{subtitle}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke={textColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke={textColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke={textColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        alignSelf: 'center',
+        textAlign: 'center',
+        margin: '8px 0 10px',
+        padding: '4px 12px',
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.92)',
+        fontWeight: 500,
+        background: 'rgba(18, 24, 34, 0.36)',
+        borderRadius: 999,
+        backdropFilter: 'blur(6px)',
+      }}>
+        {'今日'}
+      </div>
+
+      <div style={{
+        flex: 1,
+        padding: '0 12px',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        transform: `translateY(${-scrollOffset}px)`,
+        transition: 'transform 200ms',
+      }}>
+        {messages.map((m, i) => (
+          <Message key={i} {...m}/>
+        ))}
+      </div>
+
+      <div style={{
+        background: '#fff',
+        padding: '8px 12px',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <span style={{ fontSize: 22, color: '#666', cursor: 'pointer' }}>＋</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, cursor: 'pointer' }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </div>
+        <div style={{
+          flex: 1,
+          height: 32,
+          background: '#f0f0f0',
+          borderRadius: 16,
+          padding: '0 14px',
+          display: 'flex', alignItems: 'center',
+          fontSize: 13, color: '#999',
+        }}>
+          メッセージを入力
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, cursor: 'pointer' }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#666" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'translate(-1px, 1px)' }}>
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </div>
+      </div>
+
+      {isWork ? (
+        <AndroidNavBar />
+      ) : (
+        <div style={{
+          height: 16, display: 'flex', justifyContent: 'center', alignItems: 'center',
+          background: '#fff',
+        }}>
+          <div style={{ width: 120, height: 4, borderRadius: 2, background: '#0a0a0a' }}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PRIVATE_MESSAGES = [
+  { text: 'おはよう〜🌸', from: 'them' },
+  { text: '今日のお昼どうする？', from: 'them' },
+  { text: 'パスタ食べたい！', from: 'me', readBy: '既読' },
+  { text: 'いいね！駅前のお店？', from: 'them' },
+  { text: 'うん、12時集合で🍝', from: 'me', readBy: '既読' },
+  { text: '了解✨', from: 'them' },
+];
+
+const WORK_MESSAGES = [
+  { text: '先日の見積書、確認しました。', from: 'them' },
+  { text: '修正点を3点送ります。', from: 'them' },
+  { text: '承知しました。', from: 'me', readBy: '既読' },
+  { text: '本日中に対応いたします。', from: 'me', readBy: '既読' },
+  { text: 'よろしくお願いします。', from: 'them' },
+  { text: '会議は明日14時で。', from: 'them' },
+];
+
+function Message({ text, from, readBy }) {
+  const me = from === 'me';
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: me ? 'row-reverse' : 'row',
+      alignItems: 'flex-end',
+      gap: 6,
+    }}>
+      <div style={{
+        maxWidth: '70%',
+        background: me ? '#85e063' : '#fff',
+        color: '#0a0a0a',
+        padding: '8px 12px',
+        borderRadius: 16,
+        fontSize: 13,
+        lineHeight: 1.4,
+      }}>
+        {text}
+      </div>
+      {me && readBy && (
+        <div style={{
+          fontSize: 9, color: 'rgba(255,255,255,0.85)',
+          marginBottom: 2,
+        }}>
+          {readBy}<br/>13:24
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IOSStatusBarLocal() {
+  return (
+    <div style={{
+      height: 36, padding: '8px 22px 0',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      fontFamily: '"SF Pro Display", system-ui, sans-serif',
+      fontSize: 14, color: '#0a0a0a', fontWeight: 600,
+      background: 'transparent',
+    }}>
+      <span>13:24</span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <SignalDots color="#0a0a0a" />
+        <WifiIcon color="#0a0a0a" />
+        <BatteryPill pct={90} color="#0a0a0a" />
+      </div>
+    </div>
+  );
+}
+
+function IOSStatusBarDark() {
+  return (
+    <div style={{
+      height: 36,
+      padding: '8px 22px 0',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      fontFamily: '"SF Pro Display", system-ui, sans-serif',
+      fontSize: 14,
+      color: '#ffffff',
+      fontWeight: 600,
+      background: '#000000',
+    }}>
+      <span>13:24</span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <SignalDots color="#ffffff" />
+        <WifiIcon color="#ffffff" />
+        <BatteryPill pct={90} color="#ffffff" />
+      </div>
+    </div>
+  );
+}
+
+function AndroidStatusBar() {
+  return (
+    <div style={{
+      height: 48, padding: '12px 14px 0',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      fontSize: 12, fontWeight: 600, color: '#ffffff',
+      background: '#0a0a0a',
+    }}>
+      <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        13:24
+      </span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.92 }}>
+          <path d="M2 8.82A15.42 15.42 0 0 1 12 5c3.85 0 7.37 1.4 10 3.82" />
+          <path d="M5 12.86A10.2 10.2 0 0 1 12 10c2.61 0 5 .98 7 2.86" />
+          <path d="M8.5 16.43A4.94 4.94 0 0 1 12 15c1.3 0 2.5.5 3.5 1.43" />
+          <line x1="12" y1="20" x2="12.01" y2="20" />
+        </svg>
+        <svg width="14" height="10" viewBox="0 0 14 10">
+          <rect x="0" y="6" width="2.5" height="4" fill="#ffffff"/>
+          <rect x="3.5" y="4" width="2.5" height="6" fill="#ffffff"/>
+          <rect x="7" y="2" width="2.5" height="8" fill="#ffffff"/>
+          <rect x="10.5" y="0" width="2.5" height="10" fill="#ffffff"/>
+        </svg>
+        <svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true">
+          <rect x="1" y="1" width="16" height="8" rx="2" fill="none" stroke="#ffffff" strokeWidth="1.4"/>
+          <rect x="17.5" y="3" width="1.5" height="4" rx="0.8" fill="#ffffff"/>
+          <rect x="3" y="3" width="11.5" height="4" rx="1" fill="#ffffff"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function AndroidNavBar() {
+  return (
+    <div style={{
+      height: 48,
+      background: '#000',
+      display: 'flex',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      color: '#fff',
+      fontSize: 14,
+      flexShrink: 0,
+    }}>
+      <span>◀</span>
+      <span>●</span>
+      <span>■</span>
+    </div>
+  );
+}
+
+// ── scenes/devices-screen.jsx ──
+function DevicesScreen({ selectedIndex = -1, selectProgress = 0 }) {
+  const rows = [
+    { y: '20%' },
+    { y: '30%' },
+  ];
+  const imgSrc = window.__resources.devicesList || "assets/devices.jpg";
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      overflow: 'hidden',
+      background: '#000',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      <IOSStatusBarDark />
+      <div style={{
+        position: 'relative',
+        flex: 1,
+        overflow: 'hidden',
+      }}>
+        <img src={imgSrc} alt="" style={{
+          position: 'absolute', inset: 0,
+          width: '100%', height: '100%',
+          objectFit: 'cover',
+          objectPosition: 'center',
+        }}/>
+
+        {selectedIndex >= 0 && rows[selectedIndex] && (
+          <DeviceTapHighlight y={rows[selectedIndex].y} progress={selectProgress}/>
+        )}
+      </div>
+      <AndroidNavBar />
+    </div>
+  );
+}
+
+function DeviceTapHighlight({ y, progress }) {
+  const tapX = '58%';
+  const tapY = `calc(${y} - 1.2%)`;
+  const press = progress < 0.55
+    ? progress / 0.55
+    : 1 - ((progress - 0.55) / 0.45) * 0.08;
+  return (
+    <>
+      <div style={{
+        position: 'absolute',
+        left: '5%', right: '5%',
+        top: y,
+        height: '7%',
+        marginTop: '-3.5%',
+        borderRadius: 14,
+        background: 'transparent',
+        pointerEvents: 'none',
+      }}/>
+      {progress > 0 && progress < 1 && (
+        <div style={{
+          position: 'absolute',
+          left: tapX, top: tapY,
+          width: 38, height: 38,
+          marginLeft: -19, marginTop: -19,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.3)',
+          border: '2px solid rgba(255,255,255,0.85)',
+          opacity: 1,
+          transform: `scale(${1 - press * 0.12})`,
+          boxShadow: '0 0 0 6px rgba(255,255,255,0.12)',
+          pointerEvents: 'none',
+        }}/>
+      )}
+    </>
+  );
+}
+
+// ── scenes/android-home.jsx ──
+function AndroidHome({ tapping = false, tapProgress = 0, revealProgress = 1 }) {
+  const imgSrc = window.__resources.androidHome || "assets/android-home.jpg";
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      position: 'relative',
+      overflow: 'hidden',
+      background: '#000',
+    }}>
+      <img src={imgSrc} alt="" style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        objectFit: 'cover',
+        objectPosition: 'center',
+        opacity: revealProgress,
+        transform: `scale(${0.96 + revealProgress * 0.04})`,
+      }}/>
+
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
+        <IOSStatusBarDark />
+      </div>
+
+      {tapping && (
+        <TapHighlight
+          x="calc(50% - 4px)" y="85%"
+          size={56}
+          progress={tapProgress}
+        />
+      )}
+
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2 }}>
+        <AndroidNavBar />
+      </div>
+    </div>
+  );
+}
+
+// ── scenes/decor.jsx (Minimal) ──
+function PhoneFrame({ width = 320, height = 660, screenScale = 1, children }) {
+  const radius = 40;
+  return (
+    <div style={{
+      width: width + 20,
+      height: height + 20,
+      borderRadius: radius,
+      background: '#1c1c1e',
+      border: '4px solid #3a3a3c',
+      boxSizing: 'border-box',
+      padding: '8px',
+      position: 'relative',
+      boxShadow: 'none',
+    }}>
+      <div style={{
+        width: '100%', height: '100%',
+        borderRadius: radius - 8,
+        overflow: 'hidden',
+        position: 'relative',
+        background: '#000000',
+      }}>
+        <div style={{
+          width: '100%', height: '100%',
+          transform: `scale(${screenScale})`,
+          transformOrigin: 'center',
+        }}>
+          {children}
+        </div>
+        <div style={{
+          position: 'absolute', top: 8, left: '50%',
+          transform: 'translateX(-50%)',
+          width: 80, height: 20,
+          background: '#000000',
+          borderRadius: 10,
+          zIndex: 100,
+          border: '1px solid #2c2c2e',
+        }}/>
+      </div>
+    </div>
+  );
+}
+
+function Shield({ size = 80, progress = 1, locked = true }) {
+  const path = "M50 5 L90 18 L90 50 Q90 80 50 95 Q10 80 10 50 L10 18 Z";
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" style={{
+      filter: `drop-shadow(0 0 ${20 * progress}px rgba(30,136,255,${progress * 0.9}))`,
+    }}>
+      <defs>
+        <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5da9ff"/>
+          <stop offset="100%" stopColor="#1e88ff"/>
+        </linearGradient>
+      </defs>
+      <path d={path}
+        fill="url(#shieldGrad)"
+        opacity={progress}
+        stroke="#fff" strokeWidth="1.5"
+      />
+      {locked ? (
+        <g opacity={progress}>
+          <rect x="38" y="44" width="24" height="20" rx="3" fill="#fff"/>
+          <path d="M42 44 V36 a8 8 0 0 1 16 0 V44" stroke="#fff" strokeWidth="3" fill="none"/>
+        </g>
+      ) : (
+        <g opacity={progress}>
+          <rect x="38" y="44" width="24" height="20" rx="3" fill="#fff"/>
+          <path d="M42 44 V36 a8 8 0 0 1 16 0" stroke="#fff" strokeWidth="3" fill="none"/>
+        </g>
+      )}
+    </svg>
+  );
+}
 
 
-</body></html>
+function Caption({ text, accent = false, time = 0, start = 0, end = 0 }) {
+  const duration = end - start;
+  const localTime = Math.max(0, time - start);
+  const inDur = 0.35;
+  const outDur = 0.35;
+  const exitStart = duration - outDur;
+  let opacity = 1, ty = 0;
+  if (localTime < inDur) {
+    const t = Easing.easeOutCubic(clamp(localTime / inDur, 0, 1));
+    opacity = t; ty = (1 - t) * 14;
+  } else if (localTime > exitStart) {
+    const t = Easing.easeInCubic(clamp((localTime - exitStart) / outDur, 0, 1));
+    opacity = 1 - t; ty = -t * 8;
+  }
+  return (
+    <div style={{
+      opacity,
+      transform: `translateY(${ty}px)`,
+      textAlign: 'center',
+      fontFamily: '"Hiragino Sans", "Noto Sans JP", "SF Pro Display", system-ui, sans-serif',
+      fontWeight: 700,
+      fontSize: 20,
+      letterSpacing: '0.02em',
+      color: '#fff',
+      lineHeight: 1.3,
+      background: 'rgba(0,0,0,0.7)',
+      padding: '6px 12px',
+      borderRadius: '8px',
+      display: 'inline-block',
+      maxWidth: '94%',
+      wordBreak: 'break-all',
+    }}>
+      {text}
+    </div>
+  );
+}
+
+// ── scenes/timeline.jsx ──
+const T = {
+  S0: [scaleTime(0.0), scaleTime(3.0)],
+  S1: [scaleTime(3.0), scaleTime(9.3)],
+  S2: [scaleTime(9.3), scaleTime(11.3)],
+  S3: [scaleTime(11.3), scaleTime(16.8)],
+  S5: [scaleTime(16.8), scaleTime(26.3)],
+  S6: [scaleTime(26.3), scaleTime(30.8)],
+  S7: [scaleTime(30.8), scaleTime(37.4)],
+  S8: [scaleTime(37.4), scaleTime(43.6)],
+  S9: [scaleTime(43.6), scaleTime(50.6)],
+  S10: [scaleTime(50.6), scaleTime(51.6)],
+};
+
+function inSeg(time, [a, b]) { return time >= a && time < b; }
+function localProgress(time, [a, b]) {
+  return Math.max(0, Math.min(1, (time - a) / (b - a)));
+}
+
+function fadeOutNearEnd(progress, fadeWindow = 0.08) {
+  if (progress <= 1 - fadeWindow) return 1;
+  return clamp((1 - progress) / fadeWindow, 0, 1);
+}
+
+function fadeInAtStart(progress, fadeWindow = 0.08) {
+  if (progress >= fadeWindow) return 1;
+  return clamp(progress / fadeWindow, 0, 1);
+}
+
+const CALC_TAPS = [
+  { t: scaleTime(19.80), key: 'AC' },
+  { t: scaleTime(20.60), key: 'AC' },
+  { t: scaleTime(21.40), key: 'AC' },
+  { t: scaleTime(22.70), key: '1' },
+  { t: scaleTime(23.30), key: '2' },
+  { t: scaleTime(23.90), key: '3' },
+  { t: scaleTime(24.50), key: '4' },
+];
+
+function activeKeyAt(time, dur = 0.22) {
+  for (const tap of CALC_TAPS) {
+    if (time >= tap.t && time < tap.t + dur) return tap.key;
+  }
+  return null;
+}
+
+function calcDisplay(time) {
+  if (time < scaleTime(22.70)) return '0';
+  if (time < scaleTime(23.30)) return '1';
+  if (time < scaleTime(23.90)) return '12';
+  if (time < scaleTime(24.50)) return '123';
+  return '1234';
+}
+
+
+
+function calcOperator(time) {
+  return null;
+}
+
+function SplashScreen() {
+  const splashSrc = window.__resources.splash || "assets/splash.jpg";
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      backgroundImage: `url('${splashSrc}')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }}/>
+  );
+}
+
+function OpeningScreen() {
+  const openingSrc = window.__resources.opening || "assets/opening.jpg";
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      backgroundImage: `url('${openingSrc}')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    }}/>
+  );
+}
+
+function SmamoTimeline() {
+  const time = useTime();
+
+  const inS0 = inSeg(time, T.S0);
+  const inS1 = inSeg(time, T.S1);
+  const inS2 = inSeg(time, T.S2);
+  const inS3 = inSeg(time, T.S3);
+  const inS5 = inSeg(time, T.S5);
+  const inS6 = inSeg(time, T.S6);
+  const inS7 = inSeg(time, T.S7);
+  const inS8 = inSeg(time, T.S8);
+  const inS9 = inSeg(time, T.S9);
+  const inS10 = inSeg(time, T.S10);
+
+  const p0 = localProgress(time, T.S0);
+  const p1 = localProgress(time, T.S1);
+  const p2 = localProgress(time, T.S2);
+  const p3 = localProgress(time, T.S3);
+  const p5 = localProgress(time, T.S5);
+  const p6 = localProgress(time, T.S6);
+  const p7 = localProgress(time, T.S7);
+  const p8 = localProgress(time, T.S8);
+  const p10 = localProgress(time, T.S10);
+
+  let openingOpacity = 0, openingScale = 1;
+  if (inS0 || inS10) {
+    openingOpacity = inS0 ? fadeOutNearEnd(p0, 0.14) : 1;
+    openingScale = 1;
+  }
+
+  let privateLineOpacity = 0, privateLineScale = 1;
+  if (inS1) {
+    privateLineOpacity = fadeInAtStart(p1, 0.08);
+    privateLineScale = 1;
+  } else if (inS2 && p2 < 0.10) {
+    privateLineOpacity = 1;
+    privateLineScale = 1;
+  } else if (inS2) {
+    privateLineOpacity = 0;
+    privateLineScale = 1;
+  }
+
+  let iosHomeOpacity = 0, iosHomeScale = 1;
+  if (inS2) {
+    if (p2 < 0.10) {
+      const t = p2 / 0.10;
+      iosHomeOpacity = t;
+      iosHomeScale = 0.92 + t * 0.08;
+    } else {
+      iosHomeOpacity = 1;
+      iosHomeScale = 1;
+    }
+  } else if (inS3) {
+    iosHomeOpacity = 1;
+    iosHomeScale = 1;
+  } else if (inS5 && p5 < 0.021) {
+    iosHomeOpacity = 1;
+    iosHomeScale = 1;
+  }
+
+  let calcOpacity = 0, calcScale = 1;
+  if (inS5) {
+    if (p5 < 0.021) {
+      const t = p5 / 0.021;
+      calcOpacity = t;
+      calcScale = 0.92 + t * 0.08;
+    } else {
+      calcOpacity = 1;
+      calcScale = 1;
+    }
+  } else if (inS6 && p6 < 0.033) {
+    calcOpacity = 1;
+    calcScale = 1;
+  }
+
+  let splashOpacity = 0, splashScale = 1;
+  if (inS6) {
+    if (p6 < 0.033) {
+      const t = p6 / 0.033;
+      splashOpacity = t;
+      splashScale = 0.92 + t * 0.08;
+    } else {
+      splashOpacity = 1;
+      splashScale = 1;
+    }
+  }
+
+  let devicesOpacity = 0, devicesScale = 1;
+  if (inS6 && p6 > 0.967) {
+    const t = (p6 - 0.967) / 0.033;
+    devicesOpacity = t;
+    devicesScale = 0.92 + t * 0.08;
+  } else if (inS7) {
+    devicesOpacity = 1;
+    devicesScale = 1;
+  } else if (inS8 && p8 < 0.032) {
+    devicesOpacity = 1;
+    devicesScale = 1;
+  }
+
+  let androidOpacity = 0, androidReveal = 1, androidScale = 1;
+  if (inS8) {
+    if (p8 < 0.016) {
+      const t = p8 / 0.016;
+      androidOpacity = t;
+      androidScale = 0.92 + t * 0.08;
+    } else {
+      androidOpacity = 1;
+      androidScale = 1;
+    }
+    androidReveal = 1;
+  }
+
+  let workLineOpacity = 0, workLineScale = 1;
+  if (inS8 && p8 > 0.968) {
+    const t = (p8 - 0.968) / 0.032;
+    workLineOpacity = t;
+    workLineScale = 0.92 + t * 0.08;
+  } else if (inS9) {
+    workLineOpacity = 1;
+    workLineScale = 1;
+  }
+
+  const iosPulseEnd = IOS_PULSE_START + (PULSE_DURATION / IOS_PULSE_SPEED);
+  const iosTapping = inS3 && p3 > IOS_PULSE_START && p3 < iosPulseEnd;
+  const iosTapRelativeTime = iosTapping ? (p3 - IOS_PULSE_START) * IOS_PULSE_SPEED : 0;
+  const iosTapProgress = iosTapping ? clamp(iosTapRelativeTime / PULSE_DURATION, 0, 1) : 0;
+
+  const deviceSelectedIdx = inS7 && p7 > 0.72 && p7 < 0.96 ? 0 : -1;
+  const deviceSelectProgress = inS7
+    ? Math.min(1, Math.max(0, (p7 - 0.72) / 0.24))
+    : 0;
+
+  const androidPulseEnd = ANDROID_PULSE_START + (PULSE_DURATION / ANDROID_PULSE_SPEED);
+  const androidTapping = inS8 && p8 > ANDROID_PULSE_START && p8 < androidPulseEnd;
+  const androidTapRelativeTime = androidTapping ? (p8 - ANDROID_PULSE_START) * ANDROID_PULSE_SPEED : 0;
+  const androidTapProgress = androidTapping ? clamp(androidTapRelativeTime / PULSE_DURATION, 0, 1) : 0;
+
+  const activeKey = activeKeyAt(time);
+  const display = calcDisplay(time);
+
+  const shieldFlash = 0;
+  const frameGlow = 0;
+  const cyber = 0;
+
+  return (
+    <>
+      <BackgroundLayer cyber={cyber}/>
+
+      <div style={{
+        position: 'absolute', left: '50%', top: 24,
+        transform: 'translateX(-50%)',
+        zIndex: 5,
+      }}>
+        <PhoneFrame width={298} height={612} glow={frameGlow}>
+          <div style={{ position: 'relative', width: '100%', height: '100%', background: 'transparent' }}>
+            {openingOpacity > 0 && (
+              <ScreenLayer opacity={openingOpacity} scale={openingScale}>
+                <OpeningScreen />
+              </ScreenLayer>
+            )}
+            {privateLineOpacity > 0 && (
+              <ScreenLayer opacity={privateLineOpacity} scale={privateLineScale}>
+                <LineScreen mode="private"/>
+              </ScreenLayer>
+            )}
+            {iosHomeOpacity > 0 && (
+              <ScreenLayer opacity={iosHomeOpacity} scale={iosHomeScale}>
+                <IOSHome tapping={iosTapping} tapProgress={iosTapProgress}/>
+              </ScreenLayer>
+            )}
+            {calcOpacity > 0 && (
+              <ScreenLayer opacity={calcOpacity} scale={calcScale}>
+                <CalcScreen
+                  display={display}
+                  activeKey={activeKey}
+                  acHighlight={false}
+                  operator={calcOperator(time)}
+                />
+              </ScreenLayer>
+            )}
+            {splashOpacity > 0 && (
+              <ScreenLayer opacity={splashOpacity} scale={splashScale}>
+                <SplashScreen />
+              </ScreenLayer>
+            )}
+            {devicesOpacity > 0 && (
+              <ScreenLayer opacity={devicesOpacity} scale={devicesScale}>
+                <DevicesScreen
+                  selectedIndex={deviceSelectedIdx}
+                  selectProgress={deviceSelectProgress}
+                />
+              </ScreenLayer>
+            )}
+            {androidOpacity > 0 && (
+              <ScreenLayer opacity={androidOpacity} scale={androidScale}>
+                <AndroidHome
+                  tapping={androidTapping}
+                  tapProgress={androidTapProgress}
+                  revealProgress={androidReveal}
+                />
+              </ScreenLayer>
+            )}
+            {workLineOpacity > 0 && (
+              <ScreenLayer opacity={workLineOpacity} scale={workLineScale}>
+                <LineScreen mode="work"/>
+              </ScreenLayer>
+            )}
+
+            {shieldFlash > 0.05 && (
+              <ShieldFlash intensity={shieldFlash}/>
+            )}
+            <CaptionLayer/>
+          </div>
+        </PhoneFrame>
+      </div>
+    </>
+  );
+}
+
+function ShieldFlash({ intensity = 1 }) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none',
+      background: `radial-gradient(circle, rgba(30,136,255,${intensity * 0.35}) 0%, rgba(30,136,255,${intensity * 0.15}) 40%, transparent 70%)`,
+      zIndex: 50,
+    }}>
+      <Shield size={130 + intensity * 30} progress={intensity} locked={false}/>
+    </div>
+  );
+}
+
+function ScreenLayer({ opacity, scale = 1, children }) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      opacity,
+      transform: `scale(${scale})`,
+      transformOrigin: 'center',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function BackgroundLayer({ cyber }) {
+  return null;
+}
+
+function CaptionLayer() {
+  const time = useTime();
+  const s6Start = T.S6[0];
+  const s6End = T.S6[1];
+  const s7Start = T.S7[0];
+  const s7End = T.S7[1];
+  const s9Start = T.S9[0];
+  const s9End = T.S9[1];
+  const renderCaption = (start, end, text, accent = false) => {
+    if (time >= start && time <= end) {
+      return <Caption text={text} time={time} start={start} end={end} accent={accent} />;
+    }
+    return null;
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', left: 12, right: 12, bottom: 54,
+      zIndex: 110,
+      display: 'flex', justifyContent: 'center',
+      pointerEvents: 'none',
+    }}>
+      {renderCaption(scaleTime(4.0), scaleTime(7.8), "普段使いのいつものスマホ")}
+      {renderCaption(scaleTime(11.8), scaleTime(15.8), "電卓には秘密がある", true)}
+      {renderCaption(scaleTime(18.3), scaleTime(25.8), "電卓画面でパスワード入力", true)}
+      {renderCaption(s6Start + scaleTime(0.5), s6End, "スマモ起動")}
+      {renderCaption(s7Start + scaleTime(0.8), s7End, "仕事用Android起動")}
+      {renderCaption(s9Start + scaleTime(1.8), s9End, "1台で2つのLINE", true)}
+    </div>
+  );
+}
+
+Object.assign(window, { SmamoTimeline });
+</script>
+
+<script type="text/babel">
+function mountApp() {
+  function App() {
+    return (
+      <Stage width={390} height={680} duration={scaleTime(52.8)} background="transparent" persistKey="smamo-hero">
+        <SmamoTimeline/>
+      </Stage>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+}
+if (document.readyState === 'complete') mountApp();
+else window.addEventListener('load', mountApp);
+</script>
+</body>
+</html>

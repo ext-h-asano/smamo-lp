@@ -2080,7 +2080,7 @@ img {
     backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
-    min-height: 600px;
+    min-height: 540px;
     opacity: 0.88;
 }
 
