@@ -256,7 +256,7 @@ export async function resolveAgencyByCode(
 ): Promise<string | null> {
   const path =
     `/rest/v1/agencies?code=eq.${encodeURIComponent(code)}` +
-    `&active=eq.true&select=id&limit=1`;
+    `&active=eq.true&parent_agency_id=not.is.null&select=id&limit=1`;
   const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
     headers: {
       apikey: cfg.serviceRoleKey,
