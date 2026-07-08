@@ -7,7 +7,8 @@ import {
 } from "../../_lib/supabase";
 import { autoAssignContainer } from "../../_lib/auto_provisioning";
 import { sendProvisioningEmail } from "../../_lib/provisioning_email";
-import { extractSubscriptionId } from "../../_lib/billing_rules";
+import { extractSubscriptionId, isCancelRequested } from "../../_lib/billing_rules";
+import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib/billing_email";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
 
@@ -32,6 +33,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case "customer.subscription.updated": {
         const subEvent = event.data.object as Stripe.Subscription;
         await syncSubscription(stripe, env, subEvent.id);
+        // ③ 解約予約が入った瞬間 (cancel_at_period_end: false→true) に確認メール
+        if (
+          isCancelRequested(
+            event.type,
+            event.data.previous_attributes as Record<string, unknown> | undefined,
+            subEvent,
+          )
+        ) {
+          try {
+            await sendCancelConfirmForSub(stripe, env, subEvent);
+          } catch (e) {
+            console.error(`[email] cancel-confirm error sub=${subEvent.id}: ${e}`);
+          }
+        }
         // setup_intent.succeeded 側の autoAssign が race で reason='not_found'
         // に倒れていた場合の救済。RPC は冪等 (advisory lock + reason='already')
         // なので二重呼出 OK。
@@ -73,11 +88,22 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         await onInvoicePaid(stripe, env, event.data.object as Stripe.Invoice);
         break;
 
-      case "invoice.payment_failed":
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
         console.warn(
-          `[stripe] invoice.payment_failed id=${(event.data.object as Stripe.Invoice).id}`,
+          `[stripe] invoice.payment_failed id=${invoice.id} attempt=${invoice.attempt_count}`,
         );
+        // ② 決済失敗メール (best-effort)
+        try {
+          await sendPaymentFailedForInvoice(stripe, env, invoice);
+        } catch (e) {
+          console.error(`[email] payment-failed email error invoice=${invoice.id}: ${e}`);
+        }
+        // status (past_due 等) を DB へ反映
+        const failedSubId = extractSubscriptionId(invoice);
+        if (failedSubId) await syncSubscription(stripe, env, failedSubId);
         break;
+      }
 
       default:
         // Other events are acknowledged but ignored
