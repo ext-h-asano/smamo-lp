@@ -7,7 +7,7 @@ interface WelcomeEmailVars {
   portalUrl?: string;
 }
 
-const APP_DOWNLOAD_LINK = "https://smamo.jp/#download";
+const APP_DOWNLOAD_LINK = "https://apps.apple.com/jp/app/simple%E9%9B%BB%E5%8D%93/id6742208241";
 
 function escape(s: string): string {
   return s
