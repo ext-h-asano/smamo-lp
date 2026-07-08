@@ -1,0 +1,7 @@
+workers
+tests
+ops
+.superpowers
+docs
+node_modules
+.dev.vars
