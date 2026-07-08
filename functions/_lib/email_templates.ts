@@ -104,6 +104,239 @@ https://smamo.jp/
   return { subject, html, text };
 }
 
+// ================= 共通ヘルパー (課金ライフサイクル系メール用) =================
+
+/** unix 秒 → "2026年7月9日 14:30" (JST) */
+export function formatJstDateTime(tsSec: number): string {
+  return new Date(tsSec * 1000).toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** unix 秒 → "2026年7月9日" (JST) */
+export function formatJstDate(tsSec: number): string {
+  return new Date(tsSec * 1000).toLocaleDateString("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/** welcomeEmail と同一トーンの HTML 外枠。bodyHtml は呼び出し側で組み立てる */
+function renderEmailShell(args: { subject: string; heading: string; bodyHtml: string }): string {
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escape(args.subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Yu Gothic UI',sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6f8;padding:32px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+        <tr><td style="padding:32px 40px 16px;">
+          <div style="font-size:14px;letter-spacing:0.06em;color:#0a84ff;font-weight:600;">SMAMO</div>
+          <h1 style="margin:8px 0 0;font-size:22px;line-height:1.4;color:#111827;">${escape(args.heading)}</h1>
+        </td></tr>
+        <tr><td style="padding:8px 40px 24px;font-size:15px;line-height:1.7;color:#374151;">
+          ${args.bodyHtml}
+        </td></tr>
+        <tr><td style="padding:24px 40px 32px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.7;">
+          何かご不明な点は <a href="mailto:support@smamo.jp" style="color:#0a84ff;text-decoration:none;">support@smamo.jp</a> までお問い合わせください。<br>
+          — SMAMO サポート<br>
+          <a href="https://smamo.jp/" style="color:#9ca3af;">https://smamo.jp/</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** グレー枠の明細ボックス。values は呼び出し側で escape 済み HTML を渡す */
+function infoBox(title: string, rows: Array<[string, string]>): string {
+  const tr = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 0;color:#6b7280;width:40%;">${escape(k)}</td><td style="padding:4px 0;">${v}</td></tr>`,
+    )
+    .join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin:0 0 16px;"><tr><td style="padding:16px 20px;font-size:14px;color:#374151;"><div style="font-weight:600;color:#111827;margin-bottom:8px;">${escape(title)}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${tr}</table></td></tr></table>`;
+}
+
+function greetingOf(name?: string | null): string {
+  return name && name.trim() !== "" ? `${name} 様` : "お客様";
+}
+
+// ================= ① トライアル終了 24h 前リマインダー =================
+
+interface TrialReminderVars {
+  name?: string | null;
+  deviceName?: string | null;
+  planLabel: string;
+  /** JST 整形済み。例 "2026年7月9日 14:30" */
+  trialEndAt: string;
+  /** 税込 JPY */
+  amount: number;
+}
+
+export function trialReminderEmail(vars: TrialReminderVars): { subject: string; html: string; text: string } {
+  const greeting = greetingOf(vars.name);
+  const device = vars.deviceName && vars.deviceName.trim() !== "" ? vars.deviceName : "-";
+  const amountStr = `¥${vars.amount.toLocaleString("ja-JP")}`;
+  const subject = "【SMAMO】無料体験はまもなく終了します（初回お支払いのご案内）";
+
+  const text = `
+${greeting}
+
+SMAMO をご利用いただきありがとうございます。
+お客様の 3 日間無料体験は ${vars.trialEndAt} に終了します。
+
+【初回のお支払い】
+対象デバイス: ${device}
+プラン: ${vars.planLabel}
+初回お支払い (税込): ${amountStr}
+お支払い日: ${vars.trialEndAt}（無料体験終了後、ご登録のカードに自動で請求されます）
+
+このまま継続される場合、お手続きは不要です。
+
+継続をご希望でない場合は、無料体験終了までにアプリ内の
+「設定 > ご解約について」から解約のお手続きをお願いします。
+解約後も無料体験の終了までは引き続きご利用いただけます。
+
+ご不明な点は support@smamo.jp までお気軽にお問い合わせください。
+
+— SMAMO サポート
+https://smamo.jp/
+`.trim();
+
+  const bodyHtml = `
+          <p style="margin:0 0 16px;">${escape(greeting)}</p>
+          <p style="margin:0 0 16px;">SMAMO をご利用いただきありがとうございます。<br>お客様の 3 日間無料体験は <strong>${escape(vars.trialEndAt)}</strong> に終了します。</p>
+          ${infoBox("初回のお支払い", [
+            ["対象デバイス", escape(device)],
+            ["プラン", escape(vars.planLabel)],
+            ["初回お支払い (税込)", `<strong>${escape(amountStr)}</strong>`],
+            ["お支払い日", escape(vars.trialEndAt)],
+          ])}
+          <p style="margin:0 0 16px;">無料体験終了後、ご登録のカードに自動で請求されます。<br><strong>このまま継続される場合、お手続きは不要です。</strong></p>
+          <p style="margin:0;">継続をご希望でない場合は、無料体験終了までにアプリ内の「設定 → ご解約について」から解約のお手続きをお願いします。解約後も無料体験の終了までは引き続きご利用いただけます。</p>`;
+
+  return { subject, html: renderEmailShell({ subject, heading: "無料体験はまもなく終了します", bodyHtml }), text };
+}
+
+// ================= ② 決済失敗 (dunning) =================
+
+interface PaymentFailedVars {
+  name?: string | null;
+  deviceName?: string | null;
+  planLabel: string;
+  /** 税込 JPY (invoice.amount_due) */
+  amount: number;
+}
+
+export function paymentFailedEmail(vars: PaymentFailedVars): { subject: string; html: string; text: string } {
+  const greeting = greetingOf(vars.name);
+  const device = vars.deviceName && vars.deviceName.trim() !== "" ? vars.deviceName : "-";
+  const amountStr = `¥${vars.amount.toLocaleString("ja-JP")}`;
+  const subject = "【SMAMO】お支払いに失敗しました — カード情報のご確認をお願いします";
+
+  const text = `
+${greeting}
+
+SMAMO のご利用料金のお支払いに失敗しました。
+
+対象デバイス: ${device}
+プラン: ${vars.planLabel}
+請求金額 (税込): ${amountStr}
+
+ご登録のカードの有効期限・利用限度額などをご確認のうえ、
+アプリ内の「設定 > ご解約について」（お支払い方法の変更も
+こちらから行えます）からカード情報の更新をお願いします。
+
+お支払いは数日以内に自動で再試行されます。
+お支払いが確認できない状態が続いた場合、サービスのご利用を
+停止させていただくことがあります。
+
+ご不明な点は support@smamo.jp までお気軽にお問い合わせください。
+
+— SMAMO サポート
+https://smamo.jp/
+`.trim();
+
+  const bodyHtml = `
+          <p style="margin:0 0 16px;">${escape(greeting)}</p>
+          <p style="margin:0 0 16px;">SMAMO のご利用料金のお支払いに失敗しました。</p>
+          ${infoBox("ご請求内容", [
+            ["対象デバイス", escape(device)],
+            ["プラン", escape(vars.planLabel)],
+            ["請求金額 (税込)", `<strong>${escape(amountStr)}</strong>`],
+          ])}
+          <p style="margin:0 0 16px;">ご登録のカードの有効期限・利用限度額などをご確認のうえ、アプリ内の「設定 → ご解約について」（お支払い方法の変更もこちらから行えます）からカード情報の更新をお願いします。</p>
+          <p style="margin:0;">お支払いは数日以内に自動で再試行されます。お支払いが確認できない状態が続いた場合、サービスのご利用を停止させていただくことがあります。</p>`;
+
+  return { subject, html: renderEmailShell({ subject, heading: "お支払いに失敗しました", bodyHtml }), text };
+}
+
+// ================= ③ 解約受付確認 =================
+
+interface CancelConfirmVars {
+  name?: string | null;
+  deviceName?: string | null;
+  planLabel: string;
+  /** JST 整形済み。例 "2026年8月8日" */
+  periodEndDate: string;
+}
+
+export function cancelConfirmEmail(vars: CancelConfirmVars): { subject: string; html: string; text: string } {
+  const greeting = greetingOf(vars.name);
+  const device = vars.deviceName && vars.deviceName.trim() !== "" ? vars.deviceName : "-";
+  const subject = "【SMAMO】解約を受け付けました";
+
+  const text = `
+${greeting}
+
+SMAMO の解約のお手続きを受け付けました。
+
+対象デバイス: ${device}
+プラン: ${vars.planLabel}
+ご利用期限: ${vars.periodEndDate}
+
+${vars.periodEndDate} までは引き続きサービスをご利用いただけます。
+それ以降のご請求はありません。
+
+解約の取り消しをご希望の場合は、ご利用期限までにアプリ内の
+「設定 > ご解約について」からお手続きいただくか、
+support@smamo.jp までご連絡ください。
+
+これまでのご利用ありがとうございました。
+ご不明な点は support@smamo.jp までお気軽にお問い合わせください。
+
+— SMAMO サポート
+https://smamo.jp/
+`.trim();
+
+  const bodyHtml = `
+          <p style="margin:0 0 16px;">${escape(greeting)}</p>
+          <p style="margin:0 0 16px;">SMAMO の解約のお手続きを受け付けました。</p>
+          ${infoBox("解約内容", [
+            ["対象デバイス", escape(device)],
+            ["プラン", escape(vars.planLabel)],
+            ["ご利用期限", `<strong>${escape(vars.periodEndDate)}</strong>`],
+          ])}
+          <p style="margin:0 0 16px;"><strong>${escape(vars.periodEndDate)}</strong> までは引き続きサービスをご利用いただけます。それ以降のご請求はありません。</p>
+          <p style="margin:0;">解約の取り消しをご希望の場合は、ご利用期限までにアプリ内の「設定 → ご解約について」からお手続きいただくか、<a href="mailto:support@smamo.jp" style="color:#0a84ff;">support@smamo.jp</a> までご連絡ください。これまでのご利用ありがとうございました。</p>`;
+
+  return { subject, html: renderEmailShell({ subject, heading: "解約を受け付けました", bodyHtml }), text };
+}
+
 export function waitlistRegisteredEmail(args: { name?: string | null; email: string }): {
   subject: string; html: string; text: string;
 } {
