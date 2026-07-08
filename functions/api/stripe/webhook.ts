@@ -7,6 +7,7 @@ import {
 } from "../../_lib/supabase";
 import { autoAssignContainer } from "../../_lib/auto_provisioning";
 import { sendProvisioningEmail } from "../../_lib/provisioning_email";
+import { extractSubscriptionId } from "../../_lib/billing_rules";
 
 const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
 
@@ -247,15 +248,4 @@ function currentPeriodEnd(sub: Stripe.Subscription): number | null {
   // Stripe's newer API stores period end on each subscription item; fall back to the first item.
   const item = sub.items?.data?.[0] as unknown as { current_period_end?: number } | undefined;
   return item?.current_period_end ?? null;
-}
-
-function extractSubscriptionId(invoice: Stripe.Invoice): string | null {
-  const parent = (
-    invoice as unknown as { parent?: { subscription_details?: { subscription?: string } } }
-  ).parent;
-  const fromParent = parent?.subscription_details?.subscription;
-  if (fromParent) return fromParent;
-  const legacy = (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription;
-  if (!legacy) return null;
-  return typeof legacy === "string" ? legacy : legacy.id;
 }
