@@ -1,0 +1,11 @@
+name = "smamo-trial-reminder-cron"
+main = "index.ts"
+compatibility_date = "2026-05-18"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+TARGET_URL = "https://smamo.jp/api/send-trial-reminders"
+
+# DRAIN_SECRET は `wrangler secret put DRAIN_SECRET` で投入 (Task 9)
