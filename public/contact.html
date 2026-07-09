@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="googlebot" content="noindex, nofollow, noarchive">
+
+    <title>お問い合わせ | SMAMO（スマモ）</title>
+    <meta name="description" content="SMAMO（スマモ）へのお問い合わせページです。ご質問・ご解約のご相談はこちらからお気軽にどうぞ。">
+
+    <link rel="shortcut icon" href="img/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        :root {
+            --contact-bg: #12161f;
+            --contact-line: rgba(255, 255, 255, 0.12);
+            --contact-text-soft: rgba(255, 255, 255, 0.72);
+            --contact-blue: #4c9aff;
+            --contact-panel-bg: rgba(255, 255, 255, 0.05);
+            --contact-panel-border: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            background: var(--contact-bg);
+            background-image: url('img/body-bg.webp');
+            background-size: cover;
+            background-position: center top;
+            background-attachment: fixed;
+            color: #ffffff;
+        }
+
+        .header {
+            background: transparent;
+        }
+
+        .contact-page {
+            padding-top: var(--header-height);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .contact-hero {
+            padding: 72px 0 56px;
+        }
+
+        .contact-hero__inner {
+            max-width: 760px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .contact-icon {
+            width: 58px;
+            height: 58px;
+            margin: 0 auto 18px;
+            border: 4px solid rgba(76, 154, 255, 1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--contact-blue);
+            background: rgba(76, 154, 255, 0.05);
+        }
+
+        .contact-icon svg {
+            width: 28px;
+            height: 28px;
+            display: block;
+        }
+
+        .contact-title {
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 0.06em;
+        }
+
+        .contact-lead {
+            margin-top: 20px;
+            font-size: 16px;
+            line-height: 1.9;
+            color: var(--contact-text-soft);
+        }
+
+        .contact-section {
+            padding: 0 0 40px;
+            flex: 1;
+        }
+
+        .contact-grid {
+            max-width: 760px;
+            margin: 0 auto;
+            display: grid;
+            gap: 20px;
+        }
+
+        .contact-card {
+            background: var(--contact-panel-bg);
+            border-radius: 18px;
+            border: 1px solid var(--contact-panel-border);
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.14);
+            backdrop-filter: blur(10px);
+            padding: 28px 24px;
+        }
+
+        .contact-card__title {
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.4;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
+
+        .contact-card__text {
+            font-size: 15px;
+            line-height: 1.8;
+            color: var(--contact-text-soft);
+            margin-bottom: 20px;
+        }
+
+        .contact-card__link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 52px;
+            padding: 0 32px;
+            border-radius: 9999px;
+            font-size: 16px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .contact-card__link:hover {
+            opacity: 0.85;
+        }
+
+        .contact-card__link--primary {
+            background: var(--contact-blue);
+            color: #ffffff;
+        }
+
+        .contact-info-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .contact-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .contact-info-row__label {
+            color: rgba(255, 255, 255, 0.58);
+            font-weight: 700;
+            min-width: 120px;
+            flex-shrink: 0;
+        }
+
+        .contact-info-row__value {
+            color: #ffffff;
+        }
+
+        .contact-info-row__value a {
+            color: var(--contact-blue);
+            text-decoration: none;
+        }
+
+        .contact-info-row__value a:hover {
+            text-decoration: underline;
+        }
+
+        .contact-faq-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.08);
+            text-decoration: none;
+            transition: background 0.2s ease;
+        }
+
+        .contact-faq-link:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .contact-faq-link__text {
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .contact-faq-link__arrow {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 18px;
+        }
+
+        .contact-nav {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 0 0 28px;
+        }
+
+        .contact-nav__link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+            padding: 0 20px;
+            text-decoration: none;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+            background: var(--contact-panel-bg);
+            color: #fff;
+            border-radius: 9999px;
+            backdrop-filter: blur(10px);
+        }
+
+        .contact-nav__link strong {
+            font-size: 14px;
+            line-height: 1;
+            color: #fff;
+        }
+
+        @media (max-width: 767px) {
+            .contact-page {
+                padding-top: 72px;
+            }
+
+            .contact-hero {
+                padding: 48px 0 36px;
+            }
+
+            .contact-title {
+                font-size: 24px;
+            }
+
+            .contact-card {
+                padding: 20px 16px;
+            }
+
+            .contact-card__title {
+                font-size: 18px;
+            }
+
+            .contact-info-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+
+            .contact-info-row__label {
+                min-width: auto;
+            }
+
+            .contact-nav {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-container">
+            <div class="header-logo">
+                <a href="index.html" aria-label="SMAMOトップへ戻る">
+                    <img src="img/header-logo.webp" alt="SMAMO" class="logo-img">
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="contact-page">
+        <section class="contact-hero">
+            <div class="container contact-hero__inner">
+                <div class="contact-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h1 class="contact-title">お問い合わせ</h1>
+                <p class="contact-lead">SMAMOに関するご質問・ご相談・ご解約のご連絡は<br>下記よりお気軽にお問い合わせください。</p>
+            </div>
+        </section>
+
+        <section class="contact-section">
+            <div class="container">
+                <div class="contact-grid">
+                    <div class="contact-card">
+                        <h2 class="contact-card__title">メールでのお問い合わせ</h2>
+                        <p class="contact-card__text">ご質問・ご相談・ご解約のご依頼など、何でもお気軽にご連絡ください。<br>通常1営業日以内にご返信いたします。</p>
+                        <a href="mailto:support@smamo.jp" class="contact-card__link contact-card__link--primary">support@smamo.jp にメールする</a>
+                    </div>
+
+                    <div class="contact-card">
+                        <h2 class="contact-card__title">運営情報</h2>
+                        <div class="contact-info-row">
+                            <span class="contact-info-row__label">所在地</span>
+                            <span class="contact-info-row__value">〒951-8066<br>新潟県新潟市中央区上大川前通七番町1230-7<br>ストークビル鏡橋7F</span>
+                        </div>
+                        <div class="contact-info-row">
+                            <span class="contact-info-row__label">電話番号</span>
+                            <span class="contact-info-row__value">050-6868-9158（平日 10:00〜18:00）</span>
+                        </div>
+                        <div class="contact-info-row">
+                            <span class="contact-info-row__label">メール</span>
+                            <span class="contact-info-row__value"><a href="mailto:support@smamo.jp">support@smamo.jp</a></span>
+                        </div>
+                    </div>
+
+                    <div class="contact-card">
+                        <h2 class="contact-card__title">よくあるご質問</h2>
+                        <p class="contact-card__text">お問い合わせの前に、よくあるご質問もご確認ください。</p>
+                        <a href="index.html#faq-section" class="contact-faq-link">
+                            <span class="contact-faq-link__text">よくあるご質問を見る</span>
+                            <span class="contact-faq-link__arrow">&rsaquo;</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <nav class="contact-nav" aria-label="関連リンク">
+            <a href="index.html" class="contact-nav__link"><strong>トップページ</strong></a>
+            <a href="policy.html#terms" class="contact-nav__link"><strong>利用規約</strong></a>
+            <a href="policy.html#legal" class="contact-nav__link"><strong>特定商取引法に基づく表記</strong></a>
+        </nav>
+
+        <footer class="footer">
+            <div class="container footer-container">
+                <div class="footer-logo">
+                    <img src="img/logo.webp" alt="SMAMO" class="footer-logo-img">
+                </div>
+                <nav class="footer-nav">
+                    <a href="policy.html#terms" rel="noopener noreferrer">利用規約</a>
+                    <a href="policy.html#privacy" rel="noopener noreferrer">プライバシーポリシー</a>
+                    <a href="policy.html#security" rel="noopener noreferrer">情報セキュリティ基本方針</a>
+                    <a href="policy.html#antisocial" rel="noopener noreferrer">反社会的勢力排除の方針</a>
+                    <a href="policy.html#legal" rel="noopener noreferrer">特定商取引法に基づく表記</a>
+                    <a href="https://ext.cx/" target="_blank" rel="noopener noreferrer">運営会社</a>
+                </nav>
+                <p class="copyright">© 2026 SMAMO. All rights reserved.<br class="sp-only">（無断転載および引用禁止）</p>
+            </div>
+        </footer>
+    </main>
+</body>
+
+</html>
