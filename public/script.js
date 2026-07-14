@@ -401,9 +401,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let resetModalTimer = null;
 
     const PLANS = {
-        monthly: { title: 'スマモ 月額プラン', price: 3278, unit: '/月', hasInitFee: true, renewLabel: '/月（自動更新）' },
-        yearly: { title: 'スマモ 年払いプラン', price: 32780, unit: '/年', hasInitFee: true, renewLabel: '/年（自動更新）' },
-        two_year: { title: 'スマモ 2年契約プラン', price: 5478, unit: '/月', hasInitFee: false, renewLabel: '/月（2年契約・自動更新）' },
+        monthly: { title: 'スマモ 月額プラン', price: 3828, unit: '/月', hasInitFee: true, renewLabel: '/月（自動更新）' },
+        yearly: { title: 'スマモ 年払いプラン', price: 38280, unit: '/年', hasInitFee: true, renewLabel: '/年（自動更新）' },
+        two_year: { title: 'スマモ 2年契約プラン', price: 6028, unit: '/月', hasInitFee: false, renewLabel: '/月（2年契約・自動更新）' },
     };
     const INITIAL_FEE_TAX_INCL = 33000;
     const SMS_PRICE_TAX_INCL = 550;
@@ -772,13 +772,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (plan === 'yearly') {
                     togglePill.style.transform = 'translateX(100%)';
-                    mainPrice.innerHTML = '¥29,800';
-                    taxPrice.textContent = '※税込 32,780円';
+                    mainPrice.innerHTML = '¥34,800';
+                    taxPrice.textContent = '※税込 38,280円';
                     planLabel.textContent = '年額';
                 } else {
                     togglePill.style.transform = 'translateX(0)';
-                    mainPrice.innerHTML = '¥2,980';
-                    taxPrice.textContent = '※税込 3,278円';
+                    mainPrice.innerHTML = '¥3,480';
+                    taxPrice.textContent = '※税込 3,828円';
                     planLabel.textContent = '月額';
                 }
             });

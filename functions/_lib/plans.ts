@@ -26,9 +26,9 @@ export const TRIAL_DAYS = 3;
 export const SMS_OPTION_FEE_JPY = 550;
 
 export const PLAN_AMOUNTS_JPY: Record<PlanKey, number> = {
-  monthly: 3278,
-  yearly: 32780,
-  two_year: 5478,
+  monthly: 3828,
+  yearly: 38280,
+  two_year: 6028,
 };
 
 export const PLAN_HAS_INITIAL_FEE: Record<PlanKey, boolean> = {

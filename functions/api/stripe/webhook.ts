@@ -10,7 +10,10 @@ import { sendProvisioningEmail } from "../../_lib/provisioning_email";
 import { extractSubscriptionId, isCancelRequested } from "../../_lib/billing_rules";
 import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib/billing_email";
 
-const TWO_YEAR_MONTHLY_FEE_JPY = 5478;
+// 2年契約の中途解約手数料は「契約中サブスクの実際の月額 × 残月数」。
+// 料金改定(旧¥5,478/新¥6,028)をまたいでも各契約者の実価格で請求するため、
+// サブスクの items から月額を取る。この定数は items が読めない場合の保険のみ。
+const TWO_YEAR_MONTHLY_FEE_FALLBACK_JPY = 5478;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -193,7 +196,13 @@ async function onSubscriptionDeleted(
     const remainingMs = committedUntil.getTime() - Date.now();
     const remainingMonths = Math.ceil(remainingMs / (1000 * 60 * 60 * 24 * 30));
     if (remainingMonths > 0) {
-      cancellationFee = remainingMonths * TWO_YEAR_MONTHLY_FEE_JPY;
+      // items にはSMSオプション(¥550)が併存しうるので、最大額の項目＝プラン本体とみなす
+      const planMonthlyFee = Math.max(
+        0,
+        ...subscription.items.data.map((it) => it.price?.unit_amount ?? 0),
+      );
+      cancellationFee =
+        remainingMonths * (planMonthlyFee > 0 ? planMonthlyFee : TWO_YEAR_MONTHLY_FEE_FALLBACK_JPY);
       const customerId =
         typeof subscription.customer === "string"
           ? subscription.customer
