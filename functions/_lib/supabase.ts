@@ -300,3 +300,29 @@ export async function setUserReferralIfEmpty(
     throw new Error(`users.referred_by_agency_id update failed (${resp.status}): ${body}`);
   }
 }
+
+/**
+ * 招待コードから「有効な子代理店」の表示名を解決する。該当なしは null。
+ * checkout.ts の resolveAgencyByCode とは独立（そちらは無改修）。無効コードで
+ * 申込フローを止めない、表示専用の軽い照合。code は呼び出し側で正規化済みを渡す。
+ */
+export async function resolveAgencyNameByCode(
+  cfg: SupabaseAdminConfig,
+  code: string,
+): Promise<{ name: string } | null> {
+  const path =
+    `/rest/v1/agencies?code=eq.${encodeURIComponent(code)}` +
+    `&active=eq.true&parent_agency_id=not.is.null&select=name&limit=1`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`agencies name lookup failed (${resp.status}): ${body}`);
+  }
+  const rows = (await resp.json()) as { name?: string }[];
+  return rows[0]?.name ? { name: rows[0].name } : null;
+}
