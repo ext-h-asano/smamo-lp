@@ -456,6 +456,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const isAddDeviceMode = urlParams.get('mode') === 'add_device';
     const prefillDeviceName = urlParams.get('device_name') || '';
 
+    // 紹介リンク経由のアトリビューション（?ref=CODE）。
+    // 有効なら招待コード欄へ自動セット + バナー表示。無効・失敗は静かに無視し、申込は必ず通す。
+    const refApplied = document.getElementById('refApplied');
+    const invitationInput = document.getElementById('invitationCode');
+    if (!isAddDeviceMode && invitationInput) {
+        const refCode = SmamoRef.extractRefCode(
+            window.location.search, sessionStorage.getItem('smamo_ref'));
+        if (refCode) {
+            sessionStorage.setItem('smamo_ref', refCode);
+            fetch('/api/validate-ref?code=' + encodeURIComponent(refCode))
+                .then((r) => r.json())
+                .then((data) => {
+                    if (data && data.valid) {
+                        invitationInput.value = data.code;
+                        if (refApplied) {
+                            refApplied.textContent =
+                                '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
+                            refApplied.hidden = false;
+                        }
+                    } else {
+                        sessionStorage.removeItem('smamo_ref');
+                    }
+                })
+                .catch(() => { /* 検証失敗は無視（申込は通す） */ });
+        }
+        // 顧客が手で招待コード欄を空にしたら紹介を解除
+        invitationInput.addEventListener('input', () => {
+            if (invitationInput.value.trim() === '') {
+                sessionStorage.removeItem('smamo_ref');
+                if (refApplied) refApplied.hidden = true;
+            }
+        });
+    }
+
     if (prefillEmail) {
         window.setTimeout(() => {
             const priceSection = document.getElementById('price-section');

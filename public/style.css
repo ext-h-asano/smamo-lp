@@ -4260,3 +4260,14 @@ img {
         /* SPでは非表示 */
     }
 }
+
+.ref-applied {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    background: #eef7ee;
+    border: 1px solid #cfe6cf;
+    border-radius: 6px;
+    color: #1e6b2e;
+    font-size: 13px;
+    font-weight: 600;
+}
