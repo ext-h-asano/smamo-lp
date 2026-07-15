@@ -9,6 +9,7 @@ interface CheckoutRequest {
   email: string;
   name?: string;
   password: string;
+  terms_accepted?: boolean;
   device_name?: string | null;
   mode?: "signup" | "add_device";
   invitation_code?: string | null;
@@ -32,6 +33,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   if (!body.password || body.password.length < 8) {
     return jsonResponse({ error: "パスワードは 8 文字以上で入力してください。" }, 400);
+  }
+  if (body.mode !== "add_device" && body.terms_accepted !== true) {
+    return jsonResponse({ error: "利用規約とプライバシーポリシーへの同意が必要です。" }, 400);
   }
 
   const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };

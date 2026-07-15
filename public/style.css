@@ -3652,6 +3652,12 @@ img {
     opacity: 0.92;
 }
 
+.submit-btn:disabled:not(.loading) {
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+}
+
 .submit-btn.loading::before {
     content: "";
     width: 16px;

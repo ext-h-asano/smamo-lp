@@ -1326,7 +1326,11 @@
                         <input type="text" id="invitationCode" name="invitationCode" autocomplete="off" placeholder="代理店から受け取ったコード（お持ちの方のみ）">
                         <p id="refApplied" class="ref-applied" hidden></p>
                     </div>
-                    <button type="submit" class="submit-btn" id="submitBtn">アカウントを作成して次へ</button>
+                    <div class="form-checkbox form-checkbox--terms" id="accountTermsGroup">
+                        <input type="checkbox" id="accountTerms" name="accountTerms" required>
+                        <label for="accountTerms"><a href="policy.html#terms" target="_blank" rel="noopener noreferrer">利用規約とプライバシーポリシー</a>を確認し、同意する</label>
+                    </div>
+                    <button type="submit" class="submit-btn" id="submitBtn" disabled>アカウントを作成して次へ</button>
                 </form>
             </div>
 

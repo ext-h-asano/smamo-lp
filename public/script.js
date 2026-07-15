@@ -385,6 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const applicationFormStep2 = document.getElementById('applicationFormStep2');
     const submitBtn = document.getElementById('submitBtn');
     const submitBtnStep2 = document.getElementById('submitBtnStep2');
+    const accountTerms = document.getElementById('accountTerms');
+    const accountTermsGroup = document.getElementById('accountTermsGroup');
     const smsOptionStep2 = document.getElementById('smsOptionStep2');
     const planOptionDivider = document.getElementById('planOptionDivider');
     const planOptionRow = document.getElementById('planOptionRow');
@@ -413,6 +415,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let elements = null;
     let stripeConfigPromise = null;
     let paymentElementMounted = false;
+
+    function updateAccountSubmitState() {
+        if (submitBtn) submitBtn.disabled = !accountTerms?.checked;
+    }
 
     function formatYen(n) {
         return '¥' + n.toLocaleString('ja-JP');
@@ -520,6 +526,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const invitationGroup = document.getElementById('invitationCode')?.closest('.form-group');
         if (invitationGroup) invitationGroup.style.display = 'none';
+        if (accountTermsGroup) accountTermsGroup.style.display = 'none';
+        if (accountTerms) {
+            accountTerms.required = false;
+            accountTerms.disabled = true;
+        }
     }
 
     if (modal) {
@@ -571,6 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 applicationFormStep2?.reset();
                 applicationForm?.querySelectorAll('.form-group').forEach(g => g.classList.remove('has-error'));
                 applicationFormStep2?.querySelectorAll('.form-group').forEach(g => g.classList.remove('has-error'));
+                updateAccountSubmitState();
                 if (paymentElementError) {
                     paymentElementError.style.display = 'none';
                     paymentElementError.textContent = '';
@@ -688,6 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         email,
                         name,
                         password,
+                        terms_accepted: Boolean(accountTerms?.checked),
                         device_name: prefillDeviceName || null,
                         mode: isAddDeviceMode ? 'add_device' : 'signup',
                         invitation_code: (document.getElementById('invitationCode')?.value || '').trim() || null,
@@ -719,6 +732,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         smsOptionStep2?.addEventListener('change', updatePlanOptionSummary);
+        accountTerms?.addEventListener('change', updateAccountSubmitState);
+        updateAccountSubmitState();
         updatePlanOptionSummary();
     }
 
