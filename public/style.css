@@ -4271,3 +4271,10 @@ img {
     font-size: 13px;
     font-weight: 600;
 }
+
+/* 紹介リンク経由で自動適用・ロックされた招待コード欄 */
+#invitationCode.locked {
+    background: #f0f0f0;
+    color: #666;
+    cursor: not-allowed;
+}

@@ -457,7 +457,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const prefillDeviceName = urlParams.get('device_name') || '';
 
     // 紹介リンク経由のアトリビューション（?ref=CODE）。
-    // 有効なら招待コード欄へ自動セット + バナー表示。無効・失敗は静かに無視し、申込は必ず通す。
+    // 有効なら招待コード欄へ自動セット + ロック（顧客が消せない=代理店の成果を確実に紐付け）+ バナー表示。
+    // 無効・失敗は静かに無視し、申込は必ず通す。手入力の招待コード欄は編集可のまま。
     const refApplied = document.getElementById('refApplied');
     const invitationInput = document.getElementById('invitationCode');
     if (!isAddDeviceMode && invitationInput) {
@@ -470,6 +471,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 .then((data) => {
                     if (data && data.valid) {
                         invitationInput.value = data.code;
+                        // リンク経由の適用はロック：顧客が消したり書き換えたりできないようにする
+                        invitationInput.readOnly = true;
+                        invitationInput.classList.add('locked');
                         if (refApplied) {
                             refApplied.textContent =
                                 '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
