@@ -4284,3 +4284,50 @@ img {
     color: #666;
     cursor: not-allowed;
 }
+
+/* 招待コード適用時の初期費用無料通知（Step 1） */
+.invitation-benefit {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, #fff7ed, #fef3c7);
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    color: #92400e;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+.invitation-benefit i {
+    margin-right: 4px;
+    color: #f59e0b;
+}
+.invitation-benefit strong {
+    color: #b45309;
+}
+
+/* プランサマリーの初期費用無料行（Step 2） */
+.plan-summary-card__row--waived {
+    background: #fefce8;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 8px;
+}
+.plan-summary-card__row--waived i {
+    margin-right: 4px;
+    color: #f59e0b;
+    font-size: 13px;
+}
+.waived-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 8px;
+    background: #f59e0b;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+.is-free {
+    color: #16a34a !important;
+}

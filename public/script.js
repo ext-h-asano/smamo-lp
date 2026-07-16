@@ -396,6 +396,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const planSummaryRenewAmount = document.getElementById('planSummaryRenewAmount');
     const planInitialFeeRow = document.getElementById('planInitialFeeRow');
     const planInitialFeeAmount = document.getElementById('planInitialFeeAmount');
+    const planInitialFeeWaivedRow = document.getElementById('planInitialFeeWaivedRow');
+    const invitationBenefit = document.getElementById('invitationBenefit');
     const paymentElementContainer = document.getElementById('payment-element');
     const paymentElementError = document.getElementById('payment-element-error');
     const successMessage = document.getElementById('successMessage');
@@ -411,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SMS_PRICE_TAX_INCL = 550;
 
     let selectedPlan = 'monthly';
+    let hasInvitationCode = false;
     let stripe = null;
     let elements = null;
     let stripeConfigPromise = null;
@@ -442,8 +445,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (planSummaryPrice) planSummaryPrice.textContent = formatYen(plan.price);
         if (planSummaryUnit) planSummaryUnit.textContent = plan.unit;
         if (planSummaryRenewAmount) planSummaryRenewAmount.textContent = formatYen(plan.price) + plan.renewLabel;
-        if (planInitialFeeRow) planInitialFeeRow.style.display = plan.hasInitFee ? 'flex' : 'none';
+        const showInitFee = plan.hasInitFee && !hasInvitationCode;
+        const showWaived = plan.hasInitFee && hasInvitationCode;
+        if (planInitialFeeRow) planInitialFeeRow.style.display = showInitFee ? 'flex' : 'none';
         if (planInitialFeeAmount) planInitialFeeAmount.textContent = formatYen(INITIAL_FEE_TAX_INCL);
+        if (planInitialFeeWaivedRow) planInitialFeeWaivedRow.style.display = showWaived ? 'flex' : 'none';
         updatePlanOptionSummary();
     }
 
@@ -485,6 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
                             refApplied.hidden = false;
                         }
+                        if (invitationBenefit) invitationBenefit.hidden = false;
                     } else {
                         sessionStorage.removeItem('smamo_ref');
                     }
@@ -493,10 +500,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // 顧客が手で招待コード欄を空にしたら紹介を解除
         invitationInput.addEventListener('input', () => {
-            if (invitationInput.value.trim() === '') {
+            const hasCode = invitationInput.value.trim() !== '';
+            if (!hasCode) {
                 sessionStorage.removeItem('smamo_ref');
                 if (refApplied) refApplied.hidden = true;
             }
+            if (invitationBenefit) invitationBenefit.hidden = !hasCode;
         });
     }
 
@@ -641,6 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (!validateModalForm(applicationForm)) return;
             if (submitBtn) { submitBtn.classList.add('loading'); submitBtn.disabled = true; }
+            // 招待コードの有無を Step 2 のプランサマリーに反映
+            hasInvitationCode = Boolean((document.getElementById('invitationCode')?.value || '').trim());
             // Switch to step 2 and mount Payment Element
             if (smsOptionStep2) smsOptionStep2.checked = false;
             applicationFormStep2?.reset();

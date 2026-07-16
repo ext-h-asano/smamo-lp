@@ -84,8 +84,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const plans = getPlans(env);
   const plan = plans[body.plan];
 
-  // 初期費用無料キャンペーン: env トグルが "true" の間だけ初期費用の付与をスキップする
-  const initialFeeWaived = (env.INITIAL_FEE_WAIVED ?? "").toLowerCase() === "true";
+  // 初期費用無料: 有効な招待コード（代理店紹介）がある場合のみ初期費用をスキップする
+  const initialFeeWaived = Boolean(agencyId);
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
   let customer: Stripe.Customer;
@@ -125,9 +125,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     metadata.commit_months = String(plan.commitMonths);
     metadata.committed_until = committedUntil.toISOString();
   }
-  // キャンペーンで初期費用を無料化した場合、後からサポートで追えるよう記録を残す
+  // 招待コードで初期費用を無料化した場合、後からサポートで追えるよう記録を残す
   if (plan.hasInitialFee && initialFeeWaived) {
-    metadata.initial_fee_waived = "true";
+    metadata.initial_fee_waived = "invitation_code";
   }
   if (agencyCode && agencyId) {
     metadata.agency_code = agencyCode;
@@ -161,7 +161,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       metadata: { kind: "initial_fee", plan_key: body.plan },
     });
   } else if (plan.hasInitialFee && initialFeeWaived) {
-    console.log(`[checkout] 初期費用無料キャンペーン適用: sub=${subscription.id} plan=${body.plan}`);
+    console.log(`[checkout] 招待コードにより初期費用無料: sub=${subscription.id} plan=${body.plan} agency=${agencyCode}`);
   }
 
   const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent | null;
