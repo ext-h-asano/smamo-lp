@@ -1,7 +1,13 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
-import { ensureUserExists, resolveAgencyByCode, setUserReferralIfEmpty } from "../_lib/supabase";
+import {
+  ensureUserExists,
+  onboardChildViaParentCode,
+  resolveAgencyByCode,
+  resolveParentAgencyByCode,
+  setUserReferralIfEmpty,
+} from "../_lib/supabase";
 
 interface CheckoutRequest {
   plan: PlanKey;
@@ -40,19 +46,28 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
 
-  // 招待コード（任意）: 入力があれば有効な代理店か照合する。
+  // 招待コード（任意）:
+  // - 子代理店コード → 顧客紹介（既存）
+  // - 親代理店コード → 申込者をその親配下の子代理店として自動登録（ポータル子追加の代替）
   // 検証はユーザー/Stripe を作る前に行い、無効なら 400 で中断する。
   let agencyId: string | null = null;
+  let parentOnboard: { id: string; name: string; code: string } | null = null;
   const agencyCode = (body.invitation_code ?? "").trim().toUpperCase();
   if (agencyCode) {
     try {
       agencyId = await resolveAgencyByCode(cfg, agencyCode);
+      if (!agencyId) {
+        const parent = await resolveParentAgencyByCode(cfg, agencyCode);
+        if (parent) {
+          parentOnboard = { id: parent.id, name: parent.name, code: agencyCode };
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[checkout] agency lookup failed:", msg);
       return jsonResponse({ error: "システムエラーが発生しました。時間をおいて再度お試しください。" }, 500);
     }
-    if (!agencyId) {
+    if (!agencyId && !parentOnboard) {
       return jsonResponse({ error: "招待コードが無効です。", code: "invalid_invitation_code" }, 400);
     }
   }
@@ -71,12 +86,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return jsonResponse({ error: "アカウント作成に失敗しました。時間をおいて再度お試しください。" }, 500);
   }
 
-  // 代理店アトリビューション（ベストエフォート: 失敗しても申込はブロックしない）
+  // 代理店アトリビューション / 親コード経由の子自動登録
+  // （ベストエフォート: 失敗しても申込はブロックしない）
+  let onboardedChildCode: string | null = null;
   if (agencyId) {
     try {
       await setUserReferralIfEmpty(cfg, supabaseUser.id, agencyId);
     } catch (err) {
       console.error("[checkout] set referral failed:", err instanceof Error ? err.message : String(err));
+    }
+  } else if (parentOnboard) {
+    try {
+      const displayName =
+        (body.name ?? "").trim() ||
+        body.email.split("@")[0] ||
+        "代理店";
+      const onboarded = await onboardChildViaParentCode(
+        cfg,
+        parentOnboard.code,
+        supabaseUser.id,
+        displayName,
+      );
+      onboardedChildCode = onboarded.child_code;
+      agencyId = onboarded.child_id;
+      await setUserReferralIfEmpty(cfg, supabaseUser.id, onboarded.child_id);
+      console.log(
+        `[checkout] parent onboard: parent=${parentOnboard.code} child=${onboarded.child_code} created=${onboarded.created} user=${supabaseUser.id}`,
+      );
+    } catch (err) {
+      console.error("[checkout] parent onboard failed:", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -84,7 +122,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const plans = getPlans(env);
   const plan = plans[body.plan];
 
-  // 初期費用無料: 有効な招待コード（代理店紹介）がある場合のみ初期費用をスキップする
+  // 初期費用無料: 紹介/オンボードが実際に紐付いた場合のみスキップ
   const initialFeeWaived = Boolean(agencyId);
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
@@ -131,6 +169,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   if (agencyCode && agencyId) {
     metadata.agency_code = agencyCode;
+  }
+  if (parentOnboard && onboardedChildCode) {
+    metadata.agency_onboard = "parent";
+    metadata.child_agency_code = onboardedChildCode;
   }
 
   const deviceLabel = body.device_name?.trim()

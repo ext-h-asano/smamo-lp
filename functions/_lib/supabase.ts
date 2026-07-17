@@ -326,3 +326,73 @@ export async function resolveAgencyNameByCode(
   const rows = (await resp.json()) as { name?: string }[];
   return rows[0]?.name ? { name: rows[0].name } : null;
 }
+
+/**
+ * 親代理店の招待コードを解決する（子代理店オンボード用）。
+ * parent_agency_id IS NULL かつ active のみ。code は正規化済みを渡すこと。
+ */
+export async function resolveParentAgencyByCode(
+  cfg: SupabaseAdminConfig,
+  code: string,
+): Promise<{ id: string; name: string } | null> {
+  const path =
+    `/rest/v1/agencies?code=eq.${encodeURIComponent(code)}` +
+    `&active=eq.true&parent_agency_id=is.null&select=id,name&limit=1`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`parent agencies lookup failed (${resp.status}): ${body}`);
+  }
+  const rows = (await resp.json()) as { id?: string; name?: string }[];
+  const row = rows[0];
+  return row?.id && row?.name ? { id: row.id, name: row.name } : null;
+}
+
+export interface ParentOnboardResult {
+  child_id: string;
+  child_code: string;
+  parent_id: string;
+  created: boolean;
+}
+
+/**
+ * 親コード経由の申込ユーザーを子代理店として登録する（RPC）。
+ * 既に agency_members にいる場合は既存を返す（冪等）。
+ */
+export async function onboardChildViaParentCode(
+  cfg: SupabaseAdminConfig,
+  parentCode: string,
+  userId: string,
+  displayName: string,
+): Promise<ParentOnboardResult> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/rest/v1/rpc/agency_onboard_via_parent_code`,
+    {
+      method: "POST",
+      headers: {
+        apikey: cfg.serviceRoleKey,
+        Authorization: `Bearer ${cfg.serviceRoleKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        p_parent_code: parentCode,
+        p_user_id: userId,
+        p_display_name: displayName,
+      }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`agency_onboard_via_parent_code failed (${resp.status}): ${body}`);
+  }
+  const row = (await resp.json()) as ParentOnboardResult;
+  if (!row?.child_id || !row?.child_code) {
+    throw new Error("agency_onboard_via_parent_code returned unexpected payload");
+  }
+  return row;
+}

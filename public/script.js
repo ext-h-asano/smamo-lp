@@ -487,8 +487,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         invitationInput.readOnly = true;
                         invitationInput.classList.add('locked');
                         if (refApplied) {
-                            refApplied.textContent =
-                                '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
+                            if (data.kind === 'parent_onboard') {
+                                refApplied.textContent =
+                                    (data.agency_name || data.code) + ' の代理店登録リンク適用中';
+                            } else {
+                                refApplied.textContent =
+                                    '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
+                            }
                             refApplied.hidden = false;
                         }
                         if (invitationBenefit) invitationBenefit.hidden = false;
