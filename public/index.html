@@ -99,7 +99,7 @@
                 <section class="availability-board" aria-label="サーバー空き状況">
                     <div class="availability-board__header">
                         <div>
-                            <h2 class="availability-board__title">現在即提供な台数：残り<span class="availability-board__count">15台</span></h2>
+                            <h2 class="availability-board__title">現在即提供な台数：残り<span class="availability-board__count" id="availability-remaining">5台</span></h2>
                         </div>
                         <div class="availability-board__summary">
                             <span class="availability-pill is-live">稼働中</span>
@@ -115,7 +115,7 @@
                     </div>
 
                     <div class="availability-board__grid">
-                        <article class="server-card">
+                        <article class="server-card" data-openable="true">
                             <div class="server-card__head">
                                 <div>
                                     <p class="server-card__region">JP / TOKYO</p>
@@ -123,12 +123,12 @@
                                 </div>
                                 <div class="server-card__status">
                                     <span class="server-card__status-label">空き</span>
-                                    <strong><span class="count-open">8</span> / 20</strong>
+                                    <strong><span class="count-open">3</span> / 20</strong>
                                 </div>
                             </div>
                             <div class="server-slots" aria-label="東京リージョン サーバー1の空き状況">
-                                <span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span>
                                 <span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-full"></span><span class="slot is-full"></span>
+                                <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                                 <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                                 <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                             </div>
@@ -172,7 +172,7 @@
                             </div>
                         </article>
 
-                        <article class="server-card server-card--overseas">
+                        <article class="server-card server-card--overseas" data-openable="true">
                             <div class="server-card__head">
                                 <div>
                                     <p class="server-card__region">GLOBAL</p>
@@ -180,12 +180,12 @@
                                 </div>
                                 <div class="server-card__status">
                                     <span class="server-card__status-label">空き</span>
-                                    <strong><span class="count-open">7</span> / 20</strong>
+                                    <strong><span class="count-open">2</span> / 20</strong>
                                 </div>
                             </div>
                             <div class="server-slots" aria-label="海外リージョン サーバー1の空き状況">
-                                <span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-open"></span>
                                 <span class="slot is-open"></span><span class="slot is-open"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
+                                <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                                 <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                                 <span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span><span class="slot is-full"></span>
                             </div>
@@ -200,7 +200,7 @@
                         <h2 class="recent-log__title">最近の申込状況</h2>
                     </div>
 
-                    <div class="recent-log__list">
+                    <div class="recent-log__list" id="recent-log-list">
                         <article class="recent-log__item">
                             <p class="recent-log__text"><span class="recent-log__name">I様</span> <span class="recent-log__server">TOKYO Server</span> <span class="recent-log__plan">月額プラン</span></p>
                             <time class="recent-log__time" datetime="P1D">1日前</time>

@@ -890,4 +890,109 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // 10. Randomize availability board + recent signup log (per page load)
+    (function randomizeSocialProof() {
+        const CAPACITY = 20;
+        const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        const pick = (arr) => arr[randInt(0, arr.length - 1)];
+
+        const remainingEl = document.getElementById('availability-remaining');
+        const openableCards = document.querySelectorAll('.server-card[data-openable="true"]');
+        if (remainingEl && openableCards.length > 0) {
+            const totalRemaining = randInt(1, 9);
+            remainingEl.textContent = `${totalRemaining}台`;
+
+            // Distribute open slots across openable servers (sum === totalRemaining)
+            const opens = new Array(openableCards.length).fill(0);
+            for (let i = 0; i < totalRemaining; i++) {
+                opens[randInt(0, openableCards.length - 1)] += 1;
+            }
+
+            openableCards.forEach((card, index) => {
+                const openCount = opens[index];
+                const label = card.querySelector('.server-card__status-label');
+                const strong = card.querySelector('.server-card__status strong');
+                const slotsEl = card.querySelector('.server-slots');
+
+                if (label && strong) {
+                    if (openCount > 0) {
+                        label.textContent = '空き';
+                        strong.classList.remove('is-full');
+                        strong.innerHTML = `<span class="count-open">${openCount}</span> / ${CAPACITY}`;
+                    } else {
+                        label.textContent = '満枠';
+                        strong.classList.add('is-full');
+                        strong.textContent = `${CAPACITY} / ${CAPACITY}`;
+                    }
+                }
+
+                if (slotsEl) {
+                    const slots = [];
+                    for (let i = 0; i < CAPACITY; i++) {
+                        slots.push(`<span class="slot ${i < openCount ? 'is-open' : 'is-full'}"></span>`);
+                    }
+                    slotsEl.innerHTML = slots.join('');
+                }
+            });
+        }
+
+        const logList = document.getElementById('recent-log-list');
+        if (!logList) return;
+
+        const nameLetters = 'ABCDEFGHJKLMNPRSTUWYZ'.split('');
+        const servers = ['TOKYO Server', 'TOKYO Server', 'TOKYO Server', 'GLOBAL Server'];
+        const plans = [
+            { label: '月額プラン', className: 'recent-log__plan' },
+            { label: '年払いプラン', className: 'recent-log__plan recent-log__plan--annual' },
+            { label: '2年契約', className: 'recent-log__plan recent-log__plan--term' },
+        ];
+        const timeOptions = [
+            { label: 'たった今', datetime: 'PT0M', minutes: 0 },
+            { label: '3分前', datetime: 'PT3M', minutes: 3 },
+            { label: '12分前', datetime: 'PT12M', minutes: 12 },
+            { label: '28分前', datetime: 'PT28M', minutes: 28 },
+            { label: '1時間前', datetime: 'PT1H', minutes: 60 },
+            { label: '3時間前', datetime: 'PT3H', minutes: 180 },
+            { label: '5時間前', datetime: 'PT5H', minutes: 300 },
+            { label: '1日前', datetime: 'P1D', minutes: 1440 },
+            { label: '2日前', datetime: 'P2D', minutes: 2880 },
+            { label: '3日前', datetime: 'P3D', minutes: 4320 },
+        ];
+
+        const usedNames = new Set();
+        const entries = [];
+        while (entries.length < 3) {
+            const letter = pick(nameLetters);
+            if (usedNames.has(letter)) continue;
+            usedNames.add(letter);
+            entries.push({
+                name: `${letter}様`,
+                server: pick(servers),
+                plan: pick(plans),
+                time: pick(timeOptions),
+            });
+        }
+        entries.sort((a, b) => a.time.minutes - b.time.minutes);
+
+        const items = logList.querySelectorAll('.recent-log__item');
+        items.forEach((item, index) => {
+            const entry = entries[index];
+            if (!entry) return;
+            const nameEl = item.querySelector('.recent-log__name');
+            const serverEl = item.querySelector('.recent-log__server');
+            const planEl = item.querySelector('.recent-log__plan');
+            const timeEl = item.querySelector('.recent-log__time');
+            if (nameEl) nameEl.textContent = entry.name;
+            if (serverEl) serverEl.textContent = entry.server;
+            if (planEl) {
+                planEl.className = entry.plan.className;
+                planEl.textContent = entry.plan.label;
+            }
+            if (timeEl) {
+                timeEl.textContent = entry.time.label;
+                timeEl.setAttribute('datetime', entry.time.datetime);
+            }
+        });
+    })();
 });
