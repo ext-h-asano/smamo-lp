@@ -353,6 +353,91 @@ export async function resolveParentAgencyByCode(
   return row?.id && row?.name ? { id: row.id, name: row.name } : null;
 }
 
+/**
+ * マーケティングキャンペーンコードから有効なキャンペーン id を解決する。
+ * 該当なしは null。code は呼び出し側で正規化済みを渡すこと。
+ */
+export async function resolveCampaignByCode(
+  cfg: SupabaseAdminConfig,
+  code: string,
+): Promise<string | null> {
+  const path =
+    `/rest/v1/marketing_campaigns?code=eq.${encodeURIComponent(code)}` +
+    `&active=eq.true&select=id&limit=1`;
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+    },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`marketing_campaigns lookup failed (${resp.status}): ${body}`);
+  }
+  const rows = (await resp.json()) as { id?: string }[];
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * users.acquisition_campaign_id を「未設定 (NULL) の場合のみ」埋める。
+ * 再契約 / add_device での上書きを防ぐ。0 行更新も成功扱い。
+ */
+export async function setUserCampaignIfEmpty(
+  cfg: SupabaseAdminConfig,
+  userId: string,
+  campaignId: string,
+): Promise<void> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/rest/v1/users` +
+      `?id=eq.${encodeURIComponent(userId)}&acquisition_campaign_id=is.null`,
+    {
+      method: "PATCH",
+      headers: {
+        apikey: cfg.serviceRoleKey,
+        Authorization: `Bearer ${cfg.serviceRoleKey}`,
+        "content-type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ acquisition_campaign_id: campaignId }),
+    },
+  );
+  if (resp.status < 200 || resp.status >= 300) {
+    const body = await resp.text();
+    throw new Error(`users.acquisition_campaign_id update failed (${resp.status}): ${body}`);
+  }
+}
+
+/** lp_visits に1行 INSERT する。 */
+export async function insertLpVisit(
+  cfg: SupabaseAdminConfig,
+  row: {
+    campaign_id: string | null;
+    campaign_code: string | null;
+    session_id: string;
+    path: string;
+  },
+): Promise<void> {
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}/rest/v1/lp_visits`, {
+    method: "POST",
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${cfg.serviceRoleKey}`,
+      "content-type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      campaign_id: row.campaign_id,
+      campaign_code: row.campaign_code,
+      session_id: row.session_id,
+      path: row.path,
+    }),
+  });
+  if (resp.status < 200 || resp.status >= 300) {
+    const body = await resp.text();
+    throw new Error(`lp_visits insert failed (${resp.status}): ${body}`);
+  }
+}
+
 export interface ParentOnboardResult {
   child_id: string;
   child_code: string;

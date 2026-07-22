@@ -1,11 +1,14 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
+import { normalizeCampaignCode } from "../_lib/campaign";
 import {
   ensureUserExists,
   onboardChildViaParentCode,
   resolveAgencyByCode,
+  resolveCampaignByCode,
   resolveParentAgencyByCode,
+  setUserCampaignIfEmpty,
   setUserReferralIfEmpty,
 } from "../_lib/supabase";
 
@@ -19,6 +22,7 @@ interface CheckoutRequest {
   device_name?: string | null;
   mode?: "signup" | "add_device";
   invitation_code?: string | null;
+  campaign_code?: string | null;
 }
 
 function isPlanKey(v: unknown): v is PlanKey {
@@ -118,6 +122,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
+  // マーケ流入アトリビューション（代理店とは独立。無効コードは黙ってスキップ）
+  let resolvedCampaignCode: string | null = null;
+  const campaignCode = normalizeCampaignCode(body.campaign_code ?? "");
+  if (campaignCode) {
+    try {
+      const campaignId = await resolveCampaignByCode(cfg, campaignCode);
+      if (campaignId) {
+        await setUserCampaignIfEmpty(cfg, supabaseUser.id, campaignId);
+        resolvedCampaignCode = campaignCode;
+      }
+    } catch (err) {
+      console.error("[checkout] set campaign failed:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const stripe = makeStripe(env.STRIPE_SECRET_KEY);
   const plans = getPlans(env);
   const plan = plans[body.plan];
@@ -173,6 +192,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (parentOnboard && onboardedChildCode) {
     metadata.agency_onboard = "parent";
     metadata.child_agency_code = onboardedChildCode;
+  }
+  if (resolvedCampaignCode) {
+    metadata.campaign_code = resolvedCampaignCode;
   }
 
   const deviceLabel = body.device_name?.trim()

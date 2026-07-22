@@ -468,6 +468,39 @@ document.addEventListener('DOMContentLoaded', () => {
     const isAddDeviceMode = urlParams.get('mode') === 'add_device';
     const prefillDeviceName = urlParams.get('device_name') || '';
 
+    // マーケ流入（?c=CODE）。代理店 ?ref= とは独立。
+    // sessionStorage に保持し、訪問ビーコンを1セッション1回送る。
+    (function trackCampaignVisit() {
+        if (typeof SmamoCampaign === 'undefined') return;
+        const campCode = SmamoCampaign.extractCampaignCode(
+            window.location.search, sessionStorage.getItem('smamo_campaign'));
+        if (campCode) {
+            sessionStorage.setItem('smamo_campaign', campCode);
+        }
+        let sid = sessionStorage.getItem('smamo_sid');
+        if (!sid) {
+            try {
+                sid = (crypto.randomUUID && crypto.randomUUID()) ||
+                    ('s' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+            } catch (_e) {
+                sid = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+            }
+            sessionStorage.setItem('smamo_sid', sid);
+        }
+        if (sessionStorage.getItem('smamo_visit_tracked')) return;
+        sessionStorage.setItem('smamo_visit_tracked', '1');
+        fetch('/api/track', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                campaign_code: campCode || null,
+                session_id: sid,
+                path: window.location.pathname || '/',
+            }),
+            keepalive: true,
+        }).catch(() => { /* 計測失敗は無視 */ });
+    })();
+
     // 紹介リンク経由のアトリビューション（?ref=CODE）。
     // 有効なら招待コード欄へ自動セット + ロック（顧客が消せない=代理店の成果を確実に紐付け）+ バナー表示。
     // 無効・失敗は静かに無視し、申込は必ず通す。手入力の招待コード欄は編集可のまま。
@@ -720,6 +753,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         device_name: prefillDeviceName || null,
                         mode: isAddDeviceMode ? 'add_device' : 'signup',
                         invitation_code: (document.getElementById('invitationCode')?.value || '').trim() || null,
+                        campaign_code: (typeof SmamoCampaign !== 'undefined'
+                            ? SmamoCampaign.extractCampaignCode(
+                                window.location.search, sessionStorage.getItem('smamo_campaign'))
+                            : '') || null,
                     }),
                 });
                 const data = await resp.json();
