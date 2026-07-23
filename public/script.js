@@ -891,10 +891,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 10. Randomize availability board + recent signup log (per page load)
+    // 10. Randomize availability board + recent signup log (every 8 hours, shared by all visitors)
     (function randomizeSocialProof() {
         const CAPACITY = 20;
-        const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+        const BUCKET_MS = 8 * 60 * 60 * 1000;
+        // Deterministic PRNG seeded by the current 8-hour bucket — no storage / network.
+        let seed = (Math.floor(Date.now() / BUCKET_MS) ^ 0x9e3779b9) >>> 0;
+        const next = () => {
+            seed = (seed + 0x6d2b79f5) >>> 0;
+            let t = seed;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const randInt = (min, max) => Math.floor(next() * (max - min + 1)) + min;
         const pick = (arr) => arr[randInt(0, arr.length - 1)];
 
         const remainingEl = document.getElementById('availability-remaining');
