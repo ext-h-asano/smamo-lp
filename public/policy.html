@@ -292,6 +292,8 @@
                         onclick="switchTab('antisocial')">反社会的勢力排除の方針</a></li>
                 <li class="sidebar-item"><a href="#legal" id="link-legal" class="sidebar-link"
                         onclick="switchTab('legal')">特定商取引法に基づく表記</a></li>
+                <li class="sidebar-item"><a href="#account-deletion" id="link-account-deletion" class="sidebar-link"
+                        onclick="switchTab('account-deletion')">アカウント・データの削除</a></li>
             </ul>
         </aside>
 
@@ -308,6 +310,7 @@
                     <option value="security">情報セキュリティ基本方針</option>
                     <option value="antisocial">反社会的勢力排除の方針</option>
                     <option value="legal">特定商取引法に基づく表記</option>
+                    <option value="account-deletion">アカウント・データの削除</option>
                 </select>
             </div>
 
@@ -476,7 +479,7 @@
 
                 <h2>第8条（開示等請求の手続き）</h2>
                 <p>ユーザーは、当社が保有する自己の個人情報について、開示、訂正、追加、削除、利用停止、第三者提供停止を請求できます。請求方法は以下のとおりです。<br>
-                ・請求先：privacy@〇〇〇〇.jp<br>
+                ・請求先：support@smamo.jp<br>
                 ・必要書類：<br>
                 　- ご本人による請求の場合：本人確認書類のコピー、請求内容を記載した書面<br>
                 　- 法定代理人による請求の場合：上記に加え、法定代理権があることを確認する書類<br>
@@ -666,6 +669,36 @@
                     </tr>
                 </table>
             </div>
+
+            <!-- アカウント・データの削除 -->
+            <div id="account-deletion" class="tab-content content-section">
+                <h1 class="content-title">アカウント・データの削除</h1>
+                <p>株式会社ext が提供するアプリ「スマモ（SMAMO）」では、ユーザーご本人のご請求により、アカウントおよび関連データの削除を承ります。本ページは、アプリをインストールしていない状態でもご確認いただけます。</p>
+
+                <h2>削除をリクエストする手順</h2>
+                <p>1. ご登録のメールアドレスから、件名を「アカウント削除希望」として <a href="mailto:support@smamo.jp">support@smamo.jp</a> 宛にご連絡ください。<br>
+                2. 当社にてご本人であることを確認のうえ、5営業日以内に削除を実施し、完了をメールでご連絡します。<br>
+                ※ ご契約中の場合は、削除の実施をもって本サービスのご利用が終了します。料金のご請求条件は利用規約第4条に従います。</p>
+
+                <h2>削除されるデータ</h2>
+                <ul>
+                    <li>アカウント情報（メールアドレス、氏名、認証情報）</li>
+                    <li>仮想端末、および仮想端末内に保存されたすべてのデータ（インストール済みアプリ、各種アカウント、ファイル、通信履歴等）</li>
+                </ul>
+                <p>なお、ご解約の時点で仮想端末は自動的に削除されます。削除された仮想端末のデータを復元することはできません。</p>
+
+                <h2>削除後も保持するデータと保持期間</h2>
+                <ul>
+                    <li>取引記録（契約日、解約日、請求および入金の履歴）：法令に基づき <strong>7年間</strong> 保持します。この期間中は、経理・税務処理および法令に基づく照会への対応にのみ利用し、その他の目的には利用しません。</li>
+                </ul>
+                <p>上記の保持期間が経過した後は、当社の定める方法により速やかに消去します。</p>
+
+                <h2>お問い合わせ</h2>
+                <p>・事業者名：株式会社ext<br>
+                ・所在地：新潟県新潟市中央区上大川前通七番町1230-7 ストークビル鏡橋7F<br>
+                ・メール：<a href="mailto:support@smamo.jp">support@smamo.jp</a><br>
+                ・電話：050-6868-9158（受付時間：平日10:00〜18:00）</p>
+            </div>
         </main>
     </div>
 
@@ -703,7 +736,7 @@
 
         function handleRouting() {
             const hash = window.location.hash.substring(1);
-            const validTabs = ['terms', 'privacy', 'application', 'security', 'antisocial', 'legal'];
+            const validTabs = ['terms', 'privacy', 'application', 'security', 'antisocial', 'legal', 'account-deletion'];
             if (validTabs.includes(hash)) {
                 switchTab(hash);
             } else {
