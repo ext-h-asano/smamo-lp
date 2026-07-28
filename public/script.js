@@ -413,7 +413,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const SMS_PRICE_TAX_INCL = 550;
 
     let selectedPlan = 'monthly';
-    let hasInvitationCode = false;
+    // 初期費用が無料になるのは特定の招待コード（パビオ本体）だけ。
+    // 欄が空でないことではなく /api/validate-ref の判定結果で表示を切り替える。
+    let invitationWaivesInitialFee = false;
+    let invitationCheckSeq = 0;
+    let invitationCheckTimer = null;
     let stripe = null;
     let elements = null;
     let stripeConfigPromise = null;
@@ -445,12 +449,44 @@ document.addEventListener('DOMContentLoaded', () => {
         if (planSummaryPrice) planSummaryPrice.textContent = formatYen(plan.price);
         if (planSummaryUnit) planSummaryUnit.textContent = plan.unit;
         if (planSummaryRenewAmount) planSummaryRenewAmount.textContent = formatYen(plan.price) + plan.renewLabel;
-        const showInitFee = plan.hasInitFee && !hasInvitationCode;
-        const showWaived = plan.hasInitFee && hasInvitationCode;
+        const showInitFee = plan.hasInitFee && !invitationWaivesInitialFee;
+        const showWaived = plan.hasInitFee && invitationWaivesInitialFee;
         if (planInitialFeeRow) planInitialFeeRow.style.display = showInitFee ? 'flex' : 'none';
         if (planInitialFeeAmount) planInitialFeeAmount.textContent = formatYen(INITIAL_FEE_TAX_INCL);
         if (planInitialFeeWaivedRow) planInitialFeeWaivedRow.style.display = showWaived ? 'flex' : 'none';
         updatePlanOptionSummary();
+    }
+
+    // --- 招待コードによる初期費用無料の判定 ---------------------------------
+    // 表示は必ずサーバー (/api/validate-ref) の判定に従う。通信失敗時は「有料」に倒し、
+    // 表示より高く請求される事態を防ぐ（サーバーが免除するなら請求されないだけで済む）。
+
+    function applyInitialFeeWaiver(waives, seq) {
+        if (seq !== invitationCheckSeq) return; // 古い応答は破棄
+        invitationWaivesInitialFee = Boolean(waives);
+        if (invitationBenefit) invitationBenefit.hidden = !invitationWaivesInitialFee;
+        updatePlanSummaryCard();
+    }
+
+    function checkInvitationWaiverNow(rawCode) {
+        const code = (rawCode || '').trim();
+        const seq = ++invitationCheckSeq;
+        if (!code) {
+            applyInitialFeeWaiver(false, seq);
+            return Promise.resolve();
+        }
+        return fetch('/api/validate-ref?code=' + encodeURIComponent(code))
+            .then((r) => r.json())
+            .then((data) => applyInitialFeeWaiver(Boolean(data && data.valid && data.waives_initial_fee), seq))
+            .catch(() => applyInitialFeeWaiver(false, seq));
+    }
+
+    function scheduleInvitationWaiverCheck(rawCode) {
+        if (invitationCheckTimer) window.clearTimeout(invitationCheckTimer);
+        invitationCheckTimer = window.setTimeout(() => {
+            invitationCheckTimer = null;
+            checkInvitationWaiverNow(rawCode);
+        }, 400);
     }
 
     function updatePlanOptionSummary() {
@@ -529,21 +565,23 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             refApplied.hidden = false;
                         }
-                        if (invitationBenefit) invitationBenefit.hidden = false;
+                        applyInitialFeeWaiver(Boolean(data.waives_initial_fee), ++invitationCheckSeq);
                     } else {
                         sessionStorage.removeItem('smamo_ref');
                     }
                 })
                 .catch(() => { /* 検証失敗は無視（申込は通す） */ });
         }
+    }
+
+    if (invitationInput) {
         // 顧客が手で招待コード欄を空にしたら紹介を解除
         invitationInput.addEventListener('input', () => {
-            const hasCode = invitationInput.value.trim() !== '';
-            if (!hasCode) {
+            if (!isAddDeviceMode && invitationInput.value.trim() === '') {
                 sessionStorage.removeItem('smamo_ref');
                 if (refApplied) refApplied.hidden = true;
             }
-            if (invitationBenefit) invitationBenefit.hidden = !hasCode;
+            scheduleInvitationWaiverCheck(invitationInput.value);
         });
     }
 
@@ -640,6 +678,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 paymentElementMounted = false;
                 updatePlanOptionSummary();
+                // フォームリセットで招待コード欄が空になるため、初期費用の表示も再判定する
+                checkInvitationWaiverNow(document.getElementById('invitationCode')?.value || '');
                 resetModalTimer = null;
             }, 500);
         }
@@ -688,8 +728,9 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (!validateModalForm(applicationForm)) return;
             if (submitBtn) { submitBtn.classList.add('loading'); submitBtn.disabled = true; }
-            // 招待コードの有無を Step 2 のプランサマリーに反映
-            hasInvitationCode = Boolean((document.getElementById('invitationCode')?.value || '').trim());
+            // 招待コードの判定を Step 2 のプランサマリーへ反映（debounce 待ちを飛ばして即確認）
+            if (invitationCheckTimer) { window.clearTimeout(invitationCheckTimer); invitationCheckTimer = null; }
+            checkInvitationWaiverNow(document.getElementById('invitationCode')?.value || '');
             // Switch to step 2 and mount Payment Element
             if (smsOptionStep2) smsOptionStep2.checked = false;
             applicationFormStep2?.reset();

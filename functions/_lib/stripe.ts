@@ -24,8 +24,8 @@ export interface Env {
   DISCORD_WEBHOOK_URL?: string;
   /** 割当成功後のプール残量がこの値以下なら warn 通知。数値文字列。デフォルト "3" */
   POOL_WARN_THRESHOLD?: string;
-  /** "true" のとき、初期費用無料キャンペーンを有効化し checkout で初期費用 ¥33,000 の付与をスキップする。終了時は "false" / 未設定にして再デプロイ */
-  INITIAL_FEE_WAIVED?: string;
+  /** 初期費用 ¥33,000 を免除する招待コード（カンマ区切り、大文字小文字問わず）。例: "P-9A22DB44"（パビオ本体）。未設定なら誰も免除しない */
+  INITIAL_FEE_WAIVER_CODES?: string;
   /** 順番待ち登録時に trial_end を凍結する日数。数値文字列。デフォルト "365" */
   WAITLIST_FREEZE_DAYS?: string;
   /** ドレインエンドポイントの認証シークレット */

@@ -5,7 +5,6 @@
   "description": "SMAMO LP (static) + Cloudflare Pages Functions for Stripe",
   "scripts": {
     "dev": "wrangler pages dev . --compatibility-date=2026-05-18",
-    "deploy": "wrangler pages deploy .",
     "test": "vitest run"
   },
   "devDependencies": {

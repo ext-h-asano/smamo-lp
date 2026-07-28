@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
 import { normalizeCampaignCode } from "../_lib/campaign";
+import { isInitialFeeWaiverCode } from "../_lib/initial_fee";
 import {
   ensureUserExists,
   onboardChildViaParentCode,
@@ -141,8 +142,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const plans = getPlans(env);
   const plan = plans[body.plan];
 
-  // 初期費用無料: 紹介/オンボードが実際に紐付いた場合のみスキップ
-  const initialFeeWaived = Boolean(agencyId);
+  // 初期費用無料: 免除対象の招待コード (INITIAL_FEE_WAIVER_CODES = パビオ本体のコード) で、
+  // かつ紹介/オンボードが実際に紐付いた場合のみスキップ。
+  // 判定は顧客が入力したコード文字列で行う（agencyId は親コード経由のオンボード成功時に
+  // 子代理店の ID へ書き換わるため、ID からは入力コードを復元できない）。
+  const initialFeeWaived =
+    Boolean(agencyId) && isInitialFeeWaiverCode(agencyCode, env.INITIAL_FEE_WAIVER_CODES);
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
   let customer: Stripe.Customer;

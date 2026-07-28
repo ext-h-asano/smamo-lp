@@ -13,14 +13,8 @@ import {
   formatJstDateTime,
   formatJstDate,
 } from "./email_templates";
-import {
-  INITIAL_FEE_JPY,
-  PLAN_AMOUNTS_JPY,
-  PLAN_DISPLAY_NAME,
-  PLAN_HAS_INITIAL_FEE,
-  SMS_OPTION_FEE_JPY,
-  type PlanKey,
-} from "./plans";
+import { PLAN_DISPLAY_NAME, type PlanKey } from "./plans";
+import { firstChargeAmountForSubscription } from "./initial_fee";
 import { extractSubscriptionId } from "./billing_rules";
 
 interface CustomerContact {
@@ -67,13 +61,7 @@ export async function sendTrialReminderForSub(
     amount = preview.amount_due;
   } catch (e) {
     console.warn(`[email] invoice preview failed sub=${sub.id}: ${e}; fallback to plan price`);
-    const planKey = (sub.metadata?.plan_key as PlanKey | undefined) ?? "monthly";
-    const withSms = sub.metadata?.with_sms === "true";
-    const waived = sub.metadata?.initial_fee_waived === "true" || env.INITIAL_FEE_WAIVED === "true";
-    amount =
-      (PLAN_AMOUNTS_JPY[planKey] ?? PLAN_AMOUNTS_JPY.monthly) +
-      (withSms ? SMS_OPTION_FEE_JPY : 0) +
-      (!waived && PLAN_HAS_INITIAL_FEE[planKey] ? INITIAL_FEE_JPY : 0);
+    amount = firstChargeAmountForSubscription(sub.metadata);
   }
 
   const tmpl = trialReminderEmail({

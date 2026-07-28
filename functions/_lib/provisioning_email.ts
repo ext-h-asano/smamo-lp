@@ -6,14 +6,8 @@ import type Stripe from "stripe";
 import type { Env } from "./stripe";
 import { sendEmail } from "./email";
 import { welcomeEmail, waitlistRegisteredEmail } from "./email_templates";
-import {
-  INITIAL_FEE_JPY,
-  PLAN_DISPLAY_NAME,
-  PLAN_AMOUNTS_JPY,
-  PLAN_HAS_INITIAL_FEE,
-  SMS_OPTION_FEE_JPY,
-  type PlanKey,
-} from "./plans";
+import { PLAN_DISPLAY_NAME, type PlanKey } from "./plans";
+import { firstChargeAmountForSubscription } from "./initial_fee";
 import type { AutoAssignReason } from "./auto_provisioning";
 
 /**
@@ -38,10 +32,8 @@ export async function sendWelcomeForSub(
 
   const planKey = (sub.metadata?.plan_key as PlanKey | undefined) ?? "monthly";
   const withSms = sub.metadata?.with_sms === "true";
-  const planAmount = PLAN_AMOUNTS_JPY[planKey] ?? PLAN_AMOUNTS_JPY.monthly;
-  const initFee = PLAN_HAS_INITIAL_FEE[planKey] ? INITIAL_FEE_JPY : 0;
-  const smsFee = withSms ? SMS_OPTION_FEE_JPY : 0;
-  const firstChargeAmount = planAmount + initFee + smsFee;
+  // 招待コードで初期費用が免除された契約では初期費用を含めない
+  const firstChargeAmount = firstChargeAmountForSubscription(sub.metadata);
   const planLabel = PLAN_DISPLAY_NAME[planKey] + (withSms ? " + SMS オプション" : "");
   const trialEndIso = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
   const trialEndDate = trialEndIso
