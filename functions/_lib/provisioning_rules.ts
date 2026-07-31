@@ -29,9 +29,18 @@ export function shouldProvisionOnSubscriptionUpdate(
  * SetupIntent 側から逆引きすることはできない (2026-07-31 実測)。そこで /api/checkout が
  * 申込時に SetupIntent の metadata.subscription_id へ紐付けを書き込んでいる。
  *
- * metadata が無いのは本修正のデプロイ時点で決済途中だった契約だけ。その場合に限り
- * 旧来の推測 (trialing/active の先頭一致) にフォールバックする。
- * metadata が指す契約が一覧に無い場合は推測で代用せず null を返す (呼出側が critical を出す)。
+ * metadata が無い SetupIntent は恒久的に発生する。Stripe カスタマーポータルは
+ * 「お支払い方法: 全て編集可」で運用しているため (docs/smamo_lp_setup.md)、顧客がポータルで
+ * カードを更新するたびに metadata の無い SetupIntent が作られ setup_intent.succeeded が飛ぶ。
+ * つまり下のフォールバック (旧来の推測: trialing/active の先頭一致) は移行期の経過措置ではなく、
+ * 通常運用で使われ続ける経路である。
+ *
+ * このため呼出側は「metadata で一意特定できたか／推測で拾ったか」を区別して扱う必要がある。
+ * 推測経由は新規申込のカード確定かカード更新かを判別できないので、既に割当済みの契約へ
+ * 「ようこそ」メールを送ってはならない (emailOnAlready: false)。
+ *
+ * metadata が指す契約が一覧に無い場合は推測で代用せず null を返す (こちらで紐付けたはずの
+ * ものを見失った = 本当の異常なので、呼出側が critical を出す)。
  */
 export function matchSubscriptionForSetupIntent<T extends { id: string; status: string }>(
   si: { metadata?: Record<string, string> | null },

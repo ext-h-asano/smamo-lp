@@ -131,24 +131,39 @@ async function onSetupIntentSucceeded(
 
   // 契約は /api/checkout が書き込んだ metadata.subscription_id で一意に特定する。
   // (成功後は sub.pending_setup_intent が null になるため逆引きできない)
+  //
+  // metadata が無い SetupIntent は恒久的に発生する ── カスタマーポータルでのカード更新でも
+  // このイベントは飛ぶため。その場合は契約を推測で拾うことになり、「新規申込のカード確定」と
+  // 「既存契約のカード更新」を区別できない。
+  const linkedSubId = si.metadata?.subscription_id ?? null;
   const subs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
   const sub = matchSubscriptionForSetupIntent(si, subs.data);
 
   if (!sub) {
-    // カードは通っているのに割当先が分からない = 取り逃し確定。必ず人間が気付く必要がある。
+    if (!linkedSubId) {
+      // 紐付けが無く、候補の契約も無い = ポータルでカードを登録しただけ等。割当先が
+      // 存在しないだけで異常ではないので、critical は鳴らさない。
+      console.warn(
+        `[auto-provision] no subscription found for customer=${customerId} si=${si.id}, skip`,
+      );
+      return;
+    }
+    // こちらで紐付けたはずの契約を見失った = 取り逃し確定。必ず人間が気付く必要がある。
     await sendDiscord(env, "critical", {
       title: "🚨 カード登録成功だが対象契約を特定できない",
       fields: [
         { name: "setup_intent", value: si.id },
         { name: "customer", value: customerId },
-        { name: "subscription_id(metadata)", value: si.metadata?.subscription_id ?? "(unset)" },
+        { name: "subscription_id(metadata)", value: linkedSubId },
         { name: "action", value: "Stripe で契約を確認し、手動 /assign-user で割当してください" },
       ],
     });
     return;
   }
 
-  await provisionSubscription(stripe, env, sub, si.id, { emailOnAlready: true });
+  // 推測で拾った場合はカード更新の可能性があるので、割当済み (already) ではメールを送らない。
+  // reason='ok' (本当に新規割当) なら経路によらず送られるので、取りこぼしはしない。
+  await provisionSubscription(stripe, env, sub, si.id, { emailOnAlready: Boolean(linkedSubId) });
 }
 
 async function onInvoicePaid(stripe: Stripe, env: Env, invoice: Stripe.Invoice): Promise<void> {

@@ -105,7 +105,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
       // 契約行がまだ DB に無い (webhook の到着順は保証されない)。呼出元の
       // provisionSubscription が syncSubscription してから再試行するので、ここでは log のみ。
       console.log(
-        `[auto-provision] sub not in DB yet (race with subscription.created): sub=${subscriptionId} trigger=${triggerId}`,
+        `[auto-provision] sub not in DB yet (will self-heal via syncSubscription): sub=${subscriptionId} trigger=${triggerId}`,
       );
       return "not_found";
 

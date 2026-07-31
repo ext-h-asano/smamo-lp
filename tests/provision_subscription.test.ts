@@ -5,7 +5,7 @@ import { provisionSubscription } from "../functions/_lib/auto_provisioning";
 const env = {
   SUPABASE_URL: "https://example.supabase.co",
   SUPABASE_SECRET_KEY: "svc-key",
-  STRIPE_SECRET_KEY: "sk_test_not_used",
+  STRIPE_SECRET_KEY: "stripe-key-not-used",
   STRIPE_PRICE_MONTHLY: "price_monthly",
   STRIPE_PRICE_YEARLY: "price_yearly",
   STRIPE_PRICE_TWO_YEAR: "price_two_year",
