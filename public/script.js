@@ -413,7 +413,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SMS_PRICE_TAX_INCL = 550;
 
     let selectedPlan = 'monthly';
-    // 初期費用が無料になるのは特定の招待コード（パビオ本体）だけ。
+    // 初期費用が無料になるのは INITIAL_FEE_WAIVER_CODES に載った招待コードだけ。
+    // 2026-07-31 時点では secret 未設定＝免除ゼロ（誰も無料にならない）。
     // 欄が空でないことではなく /api/validate-ref の判定結果で表示を切り替える。
     let invitationWaivesInitialFee = false;
     let invitationCheckSeq = 0;
