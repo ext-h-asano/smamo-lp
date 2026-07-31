@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>パスワードの再設定 | スマモ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="reset-page">
+    <main class="reset-card">
+        <h1 class="reset-card__title">パスワードの再設定</h1>
+
+        <!-- 状態A: メールアドレスを入力して再設定メールを送る -->
+        <section id="requestSection">
+            <p class="reset-card__lead">ご登録のメールアドレスに、パスワード再設定用のリンクをお送りします。</p>
+            <form id="requestForm" class="application-form" novalidate>
+                <div class="form-group">
+                    <label for="resetEmail">メールアドレス</label>
+                    <input type="email" id="resetEmail" name="resetEmail" placeholder="example@mail.com" required>
+                    <p class="error-text">メールアドレスの形式が正しくありません。</p>
+                </div>
+                <button type="submit" class="submit-btn" id="requestBtn">再設定メールを送る</button>
+            </form>
+            <p class="reset-card__done" id="requestDone" hidden>
+                メールを送信しました。受信箱をご確認ください。<br>
+                届かない場合は迷惑メールフォルダもご確認ください。
+            </p>
+        </section>
+
+        <!-- 状態B: メールのリンクから来た。新しいパスワードを設定する -->
+        <section id="updateSection" hidden>
+            <p class="reset-card__lead">新しいパスワードを設定してください。</p>
+            <form id="updateForm" class="application-form" novalidate>
+                <div class="form-group">
+                    <label for="newPassword">新しいパスワード</label>
+                    <input type="password" id="newPassword" name="newPassword" placeholder="半角英数字8文字以上" required
+                        minlength="8">
+                    <p class="error-text" id="updateError">パスワードは 8 文字以上で入力してください。</p>
+                </div>
+                <button type="submit" class="submit-btn" id="updateBtn">パスワードを変更する</button>
+            </form>
+            <p class="reset-card__done" id="updateDone" hidden>
+                パスワードを変更しました。<br>
+                アプリでログインするか、もう一度お申し込みください。
+            </p>
+        </section>
+
+        <p class="reset-card__back"><a href="/">トップページへ戻る</a></p>
+    </main>
+
+    <script>
+        (function () {
+            'use strict';
+
+            // Supabase の recovery リンクは token を URL fragment に載せてくる。
+            // fragment はサーバーに送られないので、ここで拾って API に渡す。
+            var params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            var accessToken = params.get('access_token') || '';
+            var isRecovery = accessToken !== '' && params.get('type') === 'recovery';
+
+            var requestSection = document.getElementById('requestSection');
+            var updateSection = document.getElementById('updateSection');
+            if (isRecovery) {
+                requestSection.hidden = true;
+                updateSection.hidden = false;
+                // トークンを URL に残さない（共有・履歴経由の漏洩を避ける）
+                history.replaceState(null, '', window.location.pathname);
+            }
+
+            function setError(inputId, message) {
+                var input = document.getElementById(inputId);
+                var group = input.closest('.form-group');
+                if (!group) return;
+                var errorText = group.querySelector('.error-text');
+                if (errorText && message) errorText.textContent = message;
+                group.classList.toggle('has-error', Boolean(message));
+            }
+
+            document.getElementById('requestForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var email = document.getElementById('resetEmail').value.trim();
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    setError('resetEmail', 'メールアドレスの形式が正しくありません。');
+                    return;
+                }
+                setError('resetEmail', '');
+                var btn = document.getElementById('requestBtn');
+                btn.disabled = true;
+                fetch('/api/password-reset', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                }).catch(function () { /* 応答は常に ok なので握りつぶす */ })
+                    .then(function () {
+                        document.getElementById('requestForm').hidden = true;
+                        document.getElementById('requestDone').hidden = false;
+                    });
+            });
+
+            document.getElementById('updateForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var password = document.getElementById('newPassword').value;
+                if (password.length < 8) {
+                    setError('newPassword', 'パスワードは 8 文字以上で入力してください。');
+                    return;
+                }
+                setError('newPassword', '');
+                var btn = document.getElementById('updateBtn');
+                btn.disabled = true;
+                fetch('/api/password-update', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ access_token: accessToken, password: password })
+                }).then(function (r) {
+                    return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+                }).then(function (res) {
+                    if (!res.ok) {
+                        setError('newPassword', res.data.error || '変更に失敗しました。もう一度お試しください。');
+                        btn.disabled = false;
+                        return;
+                    }
+                    document.getElementById('updateForm').hidden = true;
+                    document.getElementById('updateDone').hidden = false;
+                }).catch(function () {
+                    setError('newPassword', '通信エラーが発生しました。時間をおいて再度お試しください。');
+                    btn.disabled = false;
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>
