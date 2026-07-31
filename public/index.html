@@ -1368,6 +1368,9 @@
                         <label for="password">パスワード <span class="required-badge">必須</span></label>
                         <input type="password" id="password" name="password" placeholder="半角英数字8文字以上" required minlength="8">
                         <p class="error-text">パスワードは 8 文字以上で入力してください。</p>
+                        <p class="form-help" id="passwordResetHelp" hidden>
+                            <a href="reset.html" target="_blank" rel="noopener noreferrer">パスワードをお忘れの方はこちら</a>
+                        </p>
                     </div>
                     <div class="form-group">
                         <label for="invitationCode">招待コード（任意）</label>
@@ -1377,6 +1380,10 @@
                             <i class="fa-solid fa-gift" aria-hidden="true"></i>
                             招待コード適用で<strong>初期費用（¥33,000）が無料</strong>になります
                         </p>
+                    </div>
+                    <div class="existing-account-notice" id="existingAccountNotice" hidden>
+                        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                        <p>既にご登録のアカウントです。<strong>2台目の追加お申し込み</strong>として進みます。</p>
                     </div>
                     <div class="form-checkbox form-checkbox--terms" id="accountTermsGroup">
                         <input type="checkbox" id="accountTerms" name="accountTerms" required>
@@ -1397,7 +1404,7 @@
                         <i class="fa-solid fa-check"></i>
                     </div>
                     <div class="account-success-card__body">
-                        <p class="account-success-card__title">アカウント作成完了 <span id="accountSuccessEmail">()</span></p>
+                        <p class="account-success-card__title"><span id="accountSuccessLabel">アカウント作成完了</span> <span id="accountSuccessEmail">()</span></p>
                     </div>
                 </div>
 

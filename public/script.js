@@ -398,6 +398,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const planInitialFeeAmount = document.getElementById('planInitialFeeAmount');
     const planInitialFeeWaivedRow = document.getElementById('planInitialFeeWaivedRow');
     const invitationBenefit = document.getElementById('invitationBenefit');
+    const existingAccountNotice = document.getElementById('existingAccountNotice');
+    const passwordResetHelp = document.getElementById('passwordResetHelp');
+    const accountSuccessLabel = document.getElementById('accountSuccessLabel');
     const paymentElementContainer = document.getElementById('payment-element');
     const paymentElementError = document.getElementById('payment-element-error');
     const successMessage = document.getElementById('successMessage');
@@ -423,6 +426,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let elements = null;
     let stripeConfigPromise = null;
     let paymentElementMounted = false;
+    // /api/account-check で「登録済み＋パスワード一致」と確定したか。
+    // true のとき申込は add_device（2台目の追加契約）として送る。
+    let existingAccountConfirmed = false;
 
     function updateAccountSubmitState() {
         if (submitBtn) submitBtn.disabled = !accountTerms?.checked;
@@ -634,6 +640,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- 登録済みアカウントの判定 -------------------------------------------
+    // Step 1（カード入力の前）で決着させる。Step 2 で弾くとカードの入れ直しになる。
+    // 判定は表示制御のためだけのもの。契約作成時は /api/checkout が
+    // ensureUserExists で同じ認証をやり直すので、ここを迂回しても契約は作れない。
+
+    function setPasswordError(message) {
+        const group = document.getElementById('password')?.closest('.form-group');
+        if (!group) return;
+        const errorText = group.querySelector('.error-text');
+        if (errorText && message) errorText.textContent = message;
+        group.classList.toggle('has-error', Boolean(message));
+        if (passwordResetHelp) passwordResetHelp.hidden = !message;
+    }
+
+    function setExistingAccount(isExisting) {
+        existingAccountConfirmed = Boolean(isExisting);
+        if (existingAccountNotice) existingAccountNotice.hidden = !existingAccountConfirmed;
+        if (accountSuccessLabel) {
+            accountSuccessLabel.textContent =
+                existingAccountConfirmed ? '既存アカウントに追加します' : 'アカウント作成完了';
+        }
+        // 既存アカウントには紹介の紐付けも初期費用免除も効かないので欄ごと隠す
+        // （URL 由来の add_device モードでは元から隠しているので触らない）。
+        if (!isAddDeviceMode) {
+            const invitationGroup = document.getElementById('invitationCode')?.closest('.form-group');
+            if (invitationGroup) invitationGroup.style.display = existingAccountConfirmed ? 'none' : '';
+        }
+    }
+
+    /**
+     * 既存アカウント判定。進んでよければ true。
+     * 通信失敗・サーバー障害では通す（fail-open）。締め出すより通した方が損が小さく、
+     * 誤って通しても /api/checkout が 409 で止めるため二重課金にはならない。
+     */
+    async function checkAccountBeforeAdvance() {
+        const email = document.getElementById('email')?.value?.trim() || '';
+        const password = document.getElementById('password')?.value || '';
+        try {
+            const resp = await fetch('/api/account-check', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                console.warn('[account-check] server error, continuing', data);
+                return true;
+            }
+            if (data.exists && !data.authenticated) {
+                setPasswordError('このメールアドレスは登録済みです。パスワードをご確認ください。');
+                return false;
+            }
+            setPasswordError('');
+            setExistingAccount(Boolean(data.exists));
+            return true;
+        } catch (err) {
+            console.warn('[account-check] request failed, continuing', err);
+            return true;
+        }
+    }
+
     if (modal) {
         function openModal() {
             if (resetModalTimer) {
@@ -694,6 +761,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 paymentElementMounted = false;
                 updatePlanOptionSummary();
+                setPasswordError('');
+                setExistingAccount(false);
                 // フォームリセットで招待コード欄が空になるため、初期費用の表示も再判定する
                 setInvitationError(false);
                 checkInvitationNow(document.getElementById('invitationCode')?.value || '');
@@ -745,6 +814,18 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             if (!validateModalForm(applicationForm)) return;
             if (submitBtn) { submitBtn.classList.add('loading'); submitBtn.disabled = true; }
+
+            // 登録済みメールかどうかをカード入力の前に確定させる。
+            // 既存アカウント＋パスワード一致なら「2台目の追加お申し込み」として続行し、
+            // 不一致ならここで足止めして再設定へ誘導する。
+            const accountOk = await checkAccountBeforeAdvance();
+            if (!accountOk) {
+                if (submitBtn) { submitBtn.classList.remove('loading'); submitBtn.disabled = false; }
+                const passwordEl = document.getElementById('password');
+                passwordEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                passwordEl?.focus({ preventScroll: true });
+                return;
+            }
 
             // 招待コードはここで確定させる。無効なら Step 2 へ進ませない
             // （カード入力後に checkout が 400 を返すと、カードの入れ直しになるため）。
@@ -819,7 +900,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         password,
                         terms_accepted: Boolean(accountTerms?.checked),
                         device_name: prefillDeviceName || null,
-                        mode: isAddDeviceMode ? 'add_device' : 'signup',
+                        mode: (isAddDeviceMode || existingAccountConfirmed) ? 'add_device' : 'signup',
                         invitation_code: (document.getElementById('invitationCode')?.value || '').trim() || null,
                         campaign_code: (typeof SmamoCampaign !== 'undefined'
                             ? SmamoCampaign.extractCampaignCode(
@@ -829,6 +910,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const data = await resp.json();
                 if (!resp.ok || !data.client_secret) {
+                    // Step 1 の判定を fail-open ですり抜けた場合の受け皿。
+                    if (data.code === 'account_exists_password_mismatch') {
+                        showErr('このメールアドレスは登録済みです。前の画面に戻り、パスワードをご確認ください。お忘れの場合は /reset から再設定できます。');
+                        return;
+                    }
                     showErr(data.error || '申込処理でエラーが発生しました。時間をおいて再度お試しください。');
                     return;
                 }

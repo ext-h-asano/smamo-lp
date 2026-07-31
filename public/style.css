@@ -4368,3 +4368,26 @@ img {
     font-size: 0.85rem;
     text-align: center;
 }
+
+/* --- 既存アカウント案内 / パスワード再設定リンク --------------------------- */
+.existing-account-notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #1d4ed8;
+    background: #eff6ff;
+    border-radius: 10px;
+}
+
+.existing-account-notice p {
+    margin: 0;
+}
+
+.form-help {
+    margin: 6px 0 0;
+    font-size: 0.8rem;
+}
