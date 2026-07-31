@@ -2,6 +2,8 @@ import type Stripe from "stripe";
 import type { Env } from "./stripe";
 import { sendDiscord } from "./discord";
 import { adminFetch } from "./supabase";
+import { syncSubscription } from "./subscription_sync";
+import { sendProvisioningEmail } from "./provisioning_email";
 
 export type AutoAssignReason = "ok" | "already" | "not_found" | "exhausted";
 
@@ -205,4 +207,75 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
       return "not_found";
     }
   }
+}
+
+/**
+ * 払い出しの唯一の窓口。カード確定 (setup_intent.succeeded) と、その安全網である
+ * 支払い方法の遷移 (customer.subscription.updated) の両方からここを呼ぶ。
+ * 契約作成 (customer.subscription.created) からは呼ばない ── カード入力前に発火するため。
+ *
+ * R1 (自己修復): Stripe の webhook は到着順が保証されないため、契約行がまだ DB に無い
+ * (reason='not_found') ことがある。その場合は自分で syncSubscription して 1 度だけ再試行する。
+ * これで他イベントの到着順に依存しなくなる。
+ *
+ * opts.emailOnAlready=false のとき、既に割当済み (reason='already') ではメールを送らない。
+ * 安全網 (updated) は通常運用でも発火しうるため、Resend の冪等ウィンドウ切れによる
+ * Welcome メール再送を防ぐ。
+ *
+ * never throw: webhook の 200 返却を妨げない。
+ */
+export async function provisionSubscription(
+  stripe: Stripe,
+  env: Env,
+  sub: Stripe.Subscription,
+  triggerId: string,
+  opts: { emailOnAlready: boolean },
+): Promise<AutoAssignReason> {
+  let email: string | null = null;
+  try {
+    const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+    const customer = await stripe.customers.retrieve(customerId);
+    if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
+  } catch (e) {
+    console.warn(`[auto-provision] customer lookup failed: ${e}`);
+  }
+
+  const assign = () =>
+    autoAssignContainer({
+      env,
+      stripe,
+      subscriptionId: sub.id,
+      customerEmail: email,
+      planKey: (sub.metadata?.plan_key as string | undefined) ?? null,
+      deviceName: (sub.metadata?.device_name as string | undefined) ?? null,
+      triggerId,
+    });
+
+  let reason = await assign();
+
+  if (reason === "not_found") {
+    // 契約行がまだ DB に無いだけ。自分で同期してから 1 度だけ再試行する。
+    try {
+      await syncSubscription(stripe, env, sub.id);
+    } catch (e) {
+      console.error(`[auto-provision] self-heal sync failed sub=${sub.id}: ${e}`);
+    }
+    reason = await assign();
+    if (reason === "not_found") {
+      await sendDiscord(env, "critical", {
+        title: "🚨 自動割当: DB 同期後も subscription が見つからない",
+        fields: [
+          { name: "subscription_id", value: sub.id },
+          { name: "trigger_id", value: triggerId },
+          { name: "action", value: "手動 /assign-user で復旧してください" },
+        ],
+      });
+      return reason;
+    }
+  }
+
+  if (reason === "already" && !opts.emailOnAlready) return reason;
+
+  await sendProvisioningEmail(stripe, env, sub, reason);
+  return reason;
 }
