@@ -458,36 +458,56 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlanOptionSummary();
     }
 
-    // --- 招待コードによる初期費用無料の判定 ---------------------------------
-    // 表示は必ずサーバー (/api/validate-ref) の判定に従う。通信失敗時は「有料」に倒し、
+    // --- 招待コードの検証 ---------------------------------------------------
+    // 判定はサーバー (/api/validate-ref) が正。checkout.ts と同じ解決ロジックなので、
+    // ここで「無効」と出たコードはカード入力後の submit でも必ず 400 になる。
+    // → Step 1（カード入力の前）で足止めし、カード再入力のやり直しを防ぐ。
+    // 初期費用の無料表示も同じ応答から決める。通信失敗時は「有料」に倒し、
     // 表示より高く請求される事態を防ぐ（サーバーが免除するなら請求されないだけで済む）。
 
-    function applyInitialFeeWaiver(waives, seq) {
-        if (seq !== invitationCheckSeq) return; // 古い応答は破棄
-        invitationWaivesInitialFee = Boolean(waives);
-        if (invitationBenefit) invitationBenefit.hidden = !invitationWaivesInitialFee;
-        updatePlanSummaryCard();
+    function setInvitationError(show) {
+        const group = document.getElementById('invitationCode')?.closest('.form-group');
+        if (group) group.classList.toggle('has-error', Boolean(show));
     }
 
-    function checkInvitationWaiverNow(rawCode) {
+    function applyInvitationStatus(status, seq) {
+        if (seq !== invitationCheckSeq) return status; // 古い応答は破棄
+        invitationWaivesInitialFee = status.waives;
+        if (invitationBenefit) invitationBenefit.hidden = !status.waives;
+        updatePlanSummaryCard();
+        return status;
+    }
+
+    // 検証を即実行して結果を返す。表示（エラー赤枠）は呼び出し側が決める。
+    function checkInvitationNow(rawCode) {
         const code = (rawCode || '').trim();
         const seq = ++invitationCheckSeq;
         if (!code) {
-            applyInitialFeeWaiver(false, seq);
-            return Promise.resolve();
+            return Promise.resolve(applyInvitationStatus(SmamoRef.interpretRefValidation('', null), seq));
         }
         return fetch('/api/validate-ref?code=' + encodeURIComponent(code))
             .then((r) => r.json())
-            .then((data) => applyInitialFeeWaiver(Boolean(data && data.valid && data.waives_initial_fee), seq))
-            .catch(() => applyInitialFeeWaiver(false, seq));
+            .then((data) => applyInvitationStatus(SmamoRef.interpretRefValidation(code, data), seq))
+            .catch(() => applyInvitationStatus(SmamoRef.interpretRefValidation(code, null), seq));
     }
 
     function scheduleInvitationWaiverCheck(rawCode) {
         if (invitationCheckTimer) window.clearTimeout(invitationCheckTimer);
         invitationCheckTimer = window.setTimeout(() => {
             invitationCheckTimer = null;
-            checkInvitationWaiverNow(rawCode);
+            checkInvitationNow(rawCode);
         }, 400);
+    }
+
+    // 「今の入力値が無効と確定しているか」を確かめる。debounce 待ちを飛ばして即問い合わせる。
+    function verifyInvitationBeforeAdvance() {
+        if (invitationCheckTimer) { window.clearTimeout(invitationCheckTimer); invitationCheckTimer = null; }
+        const raw = document.getElementById('invitationCode')?.value || '';
+        return checkInvitationNow(raw).then((status) => {
+            const blocked = SmamoRef.blocksSubmit(status);
+            setInvitationError(blocked);
+            return !blocked;
+        });
     }
 
     function updatePlanOptionSummary() {
@@ -548,16 +568,15 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.search, sessionStorage.getItem('smamo_ref'));
         if (refCode) {
             sessionStorage.setItem('smamo_ref', refCode);
-            fetch('/api/validate-ref?code=' + encodeURIComponent(refCode))
-                .then((r) => r.json())
-                .then((data) => {
-                    if (data && data.valid) {
-                        invitationInput.value = data.code;
+            checkInvitationNow(refCode)
+                .then((status) => {
+                    if (status.valid) {
+                        invitationInput.value = status.code;
                         // リンク経由の適用はロック：顧客が消したり書き換えたりできないようにする
                         invitationInput.readOnly = true;
                         invitationInput.classList.add('locked');
-                        applyInitialFeeWaiver(Boolean(data.waives_initial_fee), ++invitationCheckSeq);
                     } else {
+                        // 無効・判定不能なリンクは欄に入れない（＝申込は通る）
                         sessionStorage.removeItem('smamo_ref');
                     }
                 })
@@ -571,7 +590,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isAddDeviceMode && invitationInput.value.trim() === '') {
                 sessionStorage.removeItem('smamo_ref');
             }
+            // 入力中に赤くしない（打ちかけを無効判定してしまうため）。判定は blur / 次へ で行う。
+            setInvitationError(false);
             scheduleInvitationWaiverCheck(invitationInput.value);
+        });
+        // 欄を離れた時点で無効なら、その場で知らせる（「次へ」まで待たせない）
+        invitationInput.addEventListener('blur', () => {
+            if (invitationInput.readOnly) return; // リンク由来のロック済みコードは検証済み
+            verifyInvitationBeforeAdvance();
         });
     }
 
@@ -669,7 +695,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 paymentElementMounted = false;
                 updatePlanOptionSummary();
                 // フォームリセットで招待コード欄が空になるため、初期費用の表示も再判定する
-                checkInvitationWaiverNow(document.getElementById('invitationCode')?.value || '');
+                setInvitationError(false);
+                checkInvitationNow(document.getElementById('invitationCode')?.value || '');
                 resetModalTimer = null;
             }, 500);
         }
@@ -714,13 +741,23 @@ document.addEventListener('DOMContentLoaded', () => {
             paymentElementMounted = true;
         }
 
-        applicationForm?.addEventListener('submit', (e) => {
+        applicationForm?.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!validateModalForm(applicationForm)) return;
             if (submitBtn) { submitBtn.classList.add('loading'); submitBtn.disabled = true; }
-            // 招待コードの判定を Step 2 のプランサマリーへ反映（debounce 待ちを飛ばして即確認）
-            if (invitationCheckTimer) { window.clearTimeout(invitationCheckTimer); invitationCheckTimer = null; }
-            checkInvitationWaiverNow(document.getElementById('invitationCode')?.value || '');
+
+            // 招待コードはここで確定させる。無効なら Step 2 へ進ませない
+            // （カード入力後に checkout が 400 を返すと、カードの入れ直しになるため）。
+            // 併せて初期費用の無料表示も Step 2 のプランサマリーへ反映される。
+            const canAdvance = await verifyInvitationBeforeAdvance();
+            if (!canAdvance) {
+                if (submitBtn) { submitBtn.classList.remove('loading'); submitBtn.disabled = false; }
+                const el = document.getElementById('invitationCode');
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el?.focus({ preventScroll: true });
+                return;
+            }
+
             // Switch to step 2 and mount Payment Element
             if (smsOptionStep2) smsOptionStep2.checked = false;
             applicationFormStep2?.reset();

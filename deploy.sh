@@ -28,7 +28,20 @@ npx wrangler pages deploy public --project-name="$PROJECT" --branch=main --commi
 
 echo "--- post-deploy leak check (origin, cache-busted) ---"
 BASE=$([ "$TARGET" = prod ] && echo https://smamo.jp || echo https://dev.smamo.jp)
-for p in ".dev.vars" "node_modules/.modules.yaml" "package.json"; do
-  body=$(curl -s --max-time 10 "$BASE/$p?cb=deploycheck$$" | head -c 15)
-  if echo "$body" | grep -q DOCTYPE; then echo "OK (not served): /$p"; else echo "⚠️  LEAK: /$p is served! ($body)"; fi
+LEAKED=0
+for p in ".dev.vars" ".env" "node_modules/.modules.yaml" "package.json" "wrangler.toml"; do
+  # head -c が curl に SIGPIPE を送るため、set -euo pipefail 下では
+  # `|| true` を付けないとここでスクリプトが黙って終了する（＝チェックが走らない）。
+  body=$(curl -s --max-time 10 "$BASE/$p?cb=deploycheck$$" | head -c 40 || true)
+  if echo "$body" | grep -q DOCTYPE; then
+    echo "OK (not served): /$p"
+  else
+    echo "⚠️  LEAK: /$p is served! ($body)"
+    LEAKED=1
+  fi
 done
+if [ "$LEAKED" = 1 ]; then
+  echo "⚠️  漏洩を検出した。直ちに公開設定 (pages_build_output_dir / deploy 対象ディレクトリ) を確認すること。"
+  exit 1
+fi
+echo "--- leak check passed ---"

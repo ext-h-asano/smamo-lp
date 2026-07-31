@@ -39,6 +39,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return jsonResponse({ valid: false });
   } catch (err) {
     console.error("[validate-ref] lookup failed:", err instanceof Error ? err.message : String(err));
-    return jsonResponse({ valid: false });
+    // error: true = 「無効」ではなく「確認できなかった」。
+    // LP はこれを見て Step 1 で足止めせず、最終判定を checkout に委ねる。
+    return jsonResponse({ valid: false, error: true });
   }
 };
