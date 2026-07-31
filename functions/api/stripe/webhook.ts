@@ -27,87 +27,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   try {
-    switch (event.type) {
-      case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        const subEvent = event.data.object as Stripe.Subscription;
-        await syncSubscription(stripe, env, subEvent.id);
-        // ③ 解約予約が入った瞬間 (cancel_at_period_end: false→true) に確認メール
-        if (
-          isCancelRequested(
-            event.type,
-            event.data.previous_attributes as Record<string, unknown> | undefined,
-            subEvent,
-          )
-        ) {
-          try {
-            await sendCancelConfirmForSub(stripe, env, subEvent);
-          } catch (e) {
-            console.error(`[email] cancel-confirm error sub=${subEvent.id}: ${e}`);
-          }
-        }
-        // setup_intent.succeeded 側の autoAssign が race で reason='not_found'
-        // に倒れていた場合の救済。RPC は冪等 (advisory lock + reason='already')
-        // なので二重呼出 OK。
-        if (event.type === "customer.subscription.created") {
-          const customerId =
-            typeof subEvent.customer === "string"
-              ? subEvent.customer
-              : subEvent.customer.id;
-          let email: string | null = null;
-          try {
-            const customer = await stripe.customers.retrieve(customerId);
-            if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
-          } catch (e) {
-            console.warn(`[auto-provision] customer lookup failed: ${e}`);
-          }
-          const reason = await autoAssignContainer({
-            env,
-            stripe,
-            subscriptionId: subEvent.id,
-            customerEmail: email,
-            planKey: (subEvent.metadata?.plan_key as string | undefined) ?? null,
-            deviceName: (subEvent.metadata?.device_name as string | undefined) ?? null,
-            triggerId: event.id,
-          });
-          await sendProvisioningEmail(stripe, env, subEvent, reason);
-        }
-        break;
-      }
-
-      case "setup_intent.succeeded":
-        await onSetupIntentSucceeded(stripe, env, event.data.object as Stripe.SetupIntent);
-        break;
-
-      case "customer.subscription.deleted":
-        await onSubscriptionDeleted(stripe, env, event.data.object as Stripe.Subscription);
-        break;
-
-      case "invoice.paid":
-        await onInvoicePaid(stripe, env, event.data.object as Stripe.Invoice);
-        break;
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.warn(
-          `[stripe] invoice.payment_failed id=${invoice.id} attempt=${invoice.attempt_count}`,
-        );
-        // ② 決済失敗メール (best-effort)
-        try {
-          await sendPaymentFailedForInvoice(stripe, env, invoice);
-        } catch (e) {
-          console.error(`[email] payment-failed email error invoice=${invoice.id}: ${e}`);
-        }
-        // status (past_due 等) を DB へ反映
-        const failedSubId = extractSubscriptionId(invoice);
-        if (failedSubId) await syncSubscription(stripe, env, failedSubId);
-        break;
-      }
-
-      default:
-        // Other events are acknowledged but ignored
-        console.log(`[stripe] ignored event ${event.type}`);
-    }
+    await handleStripeEvent(stripe, env, event);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[stripe] handler error for ${event.type}:`, msg);
@@ -116,6 +36,97 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   return jsonResponse({ received: true });
 };
+
+/**
+ * 署名検証済みイベントの振り分け。transport (署名検証) と分離してあるのでテストから直接呼べる。
+ */
+export async function handleStripeEvent(
+  stripe: Stripe,
+  env: Env,
+  event: Stripe.Event,
+): Promise<void> {
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated": {
+      const subEvent = event.data.object as Stripe.Subscription;
+      await syncSubscription(stripe, env, subEvent.id);
+      // ③ 解約予約が入った瞬間 (cancel_at_period_end: false→true) に確認メール
+      if (
+        isCancelRequested(
+          event.type,
+          event.data.previous_attributes as Record<string, unknown> | undefined,
+          subEvent,
+        )
+      ) {
+        try {
+          await sendCancelConfirmForSub(stripe, env, subEvent);
+        } catch (e) {
+          console.error(`[email] cancel-confirm error sub=${subEvent.id}: ${e}`);
+        }
+      }
+      // setup_intent.succeeded 側の autoAssign が race で reason='not_found'
+      // に倒れていた場合の救済。RPC は冪等 (advisory lock + reason='already')
+      // なので二重呼出 OK。
+      if (event.type === "customer.subscription.created") {
+        const customerId =
+          typeof subEvent.customer === "string"
+            ? subEvent.customer
+            : subEvent.customer.id;
+        let email: string | null = null;
+        try {
+          const customer = await stripe.customers.retrieve(customerId);
+          if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
+        } catch (e) {
+          console.warn(`[auto-provision] customer lookup failed: ${e}`);
+        }
+        const reason = await autoAssignContainer({
+          env,
+          stripe,
+          subscriptionId: subEvent.id,
+          customerEmail: email,
+          planKey: (subEvent.metadata?.plan_key as string | undefined) ?? null,
+          deviceName: (subEvent.metadata?.device_name as string | undefined) ?? null,
+          triggerId: event.id,
+        });
+        await sendProvisioningEmail(stripe, env, subEvent, reason);
+      }
+      break;
+    }
+
+    case "setup_intent.succeeded":
+      await onSetupIntentSucceeded(stripe, env, event.data.object as Stripe.SetupIntent);
+      break;
+
+    case "customer.subscription.deleted":
+      await onSubscriptionDeleted(stripe, env, event.data.object as Stripe.Subscription);
+      break;
+
+    case "invoice.paid":
+      await onInvoicePaid(stripe, env, event.data.object as Stripe.Invoice);
+      break;
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      console.warn(
+        `[stripe] invoice.payment_failed id=${invoice.id} attempt=${invoice.attempt_count}`,
+      );
+      // ② 決済失敗メール (best-effort)
+      try {
+        await sendPaymentFailedForInvoice(stripe, env, invoice);
+      } catch (e) {
+        console.error(`[email] payment-failed email error invoice=${invoice.id}: ${e}`);
+      }
+      // status (past_due 等) を DB へ反映
+      const failedSubId = extractSubscriptionId(invoice);
+      if (failedSubId) await syncSubscription(stripe, env, failedSubId);
+      break;
+    }
+
+    default:
+      // Other events are acknowledged but ignored
+      console.log(`[stripe] ignored event ${event.type}`);
+  }
+}
 
 async function onSetupIntentSucceeded(
   stripe: Stripe,
