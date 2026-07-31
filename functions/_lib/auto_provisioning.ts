@@ -262,12 +262,26 @@ export async function provisionSubscription(
     }
     reason = await assign();
     if (reason === "not_found") {
+      // ここに来る経路は5通りあるが、うち4通り(Supabase 到達不能・RPC 非2xx・
+      // 空/不正レスポンス・未知 reason)は autoAssignContainer 側で既に critical が
+      // 鳴っている。それらの場合、断定的に「手動 /assign-user」と指示すると
+      // Supabase 障害を見落として無駄な手動操作を誘発するので、切り分けを促す
+      // 文言にする。supabase_user_id が unset なら subscription_sync.ts が
+      // upsert を skip しているのが最頻の原因なので一次切り分け用に載せる。
       await sendDiscord(env, "critical", {
         title: "🚨 自動割当: DB 同期後も subscription が見つからない",
         fields: [
           { name: "subscription_id", value: sub.id },
           { name: "trigger_id", value: triggerId },
-          { name: "action", value: "手動 /assign-user で復旧してください" },
+          {
+            name: "supabase_user_id(metadata)",
+            value: sub.metadata?.supabase_user_id ?? "(unset — これが原因なら DB 同期自体が skip されている)",
+          },
+          {
+            name: "action",
+            value:
+              "直前に別の critical (RPC エラー/通信エラー) が出ていないか確認すること。出ていれば Supabase 障害側の対処が先。出ていなければ手動 /assign-user で復旧",
+          },
         ],
       });
       return reason;
@@ -276,6 +290,14 @@ export async function provisionSubscription(
 
   if (reason === "already" && !opts.emailOnAlready) return reason;
 
-  await sendProvisioningEmail(stripe, env, sub, reason);
+  // メール送信の失敗で webhook を落とさない (never-throw 契約)。
+  // Resend の一時障害や不正レスポンスでも割当自体は成功しているので、
+  // ここで throw させて Stripe に再送させると 'already' で握り潰され
+  // Welcome メールが恒久的に届かなくなる。
+  try {
+    await sendProvisioningEmail(stripe, env, sub, reason);
+  } catch (e) {
+    console.error(`[auto-provision] provisioning email failed sub=${sub.id} reason=${reason}: ${e}`);
+  }
   return reason;
 }
