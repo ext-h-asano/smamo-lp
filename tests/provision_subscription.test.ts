@@ -150,6 +150,43 @@ describe("provisionSubscription", () => {
     expect(calls.some((c) => c.url.includes("api.resend.com"))).toBe(false);
   });
 
+  it("ok + emailOnAlready:false でもメールを送る (抑止は already のときだけ)", async () => {
+    // emailOnAlready:false の抑止が reason='ok' まで巻き込むと、課金された顧客に
+    // 案内が届かないという最悪の事故になる。推測経路 (ポータル由来の setup_intent) と
+    // updated 安全網はこの組合せを通るので、上の already ケースと対で不変条件を固定する。
+    const testEnv = { ...env, RESEND_API_KEY: "resend-key" } as never;
+    const sub = makeSub();
+    const calls: { url: string; method: string }[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        calls.push({ url, method });
+
+        if (url.includes("api.stripe.com/v1/customers/")) {
+          return jsonRes(200, { id: "cus_123", object: "customer", email: "a@example.com", deleted: false });
+        }
+        if (url.includes("/rest/v1/rpc/auto_assign_pool_container")) {
+          return jsonRes(200, [
+            { reason: "ok", container_name: "c1", scrcpy_port: 5555, remaining_pool: 10, user_id_assigned: "user-abc" },
+          ]);
+        }
+        if (url.includes("api.resend.com/emails")) {
+          return jsonRes(200, { id: "email_1" });
+        }
+        throw new Error(`unexpected call: ${method} ${url}`);
+      }),
+    );
+    const stripe = makeStripe(env.STRIPE_SECRET_KEY);
+
+    const reason = await provisionSubscription(stripe, testEnv, sub, "evt_4", { emailOnAlready: false });
+
+    expect(reason).toBe("ok");
+    expect(calls.some((c) => c.url.includes("api.resend.com"))).toBe(true);
+  });
+
   it("already + emailOnAlready:true ではメールを送る (上記の対比・回帰テスト)", async () => {
     const testEnv = { ...env, RESEND_API_KEY: "resend-key" } as never;
     const sub = makeSub();
