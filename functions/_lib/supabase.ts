@@ -94,9 +94,120 @@ export async function adminFetch<T>(
 }
 
 /**
- * Create a Supabase Auth user with the given email/password. If a user already
- * exists for that email, look it up and return the existing record without
- * touching the password.
+ * 既存アカウントに対してパスワードが一致しなかった。
+ * 呼び出し側 (checkout) はこれを 409 に変換し、Stripe には一切触らずに中断する。
+ */
+export class AccountPasswordMismatchError extends Error {
+  constructor() {
+    super("account exists but password does not match");
+    this.name = "AccountPasswordMismatchError";
+  }
+}
+
+/**
+ * GoTrue Admin API でメールアドレスからユーザーを引く。
+ * filter は PostgREST 構文ではなくプレーン文字列の部分一致検索なので、
+ * per_page を広げたうえで完全一致（大文字小文字は無視）を自前で探す。
+ */
+export async function findUserByEmail(
+  cfg: SupabaseAdminConfig,
+  email: string,
+): Promise<AuthUser | null> {
+  const filter = encodeURIComponent(email);
+  const list = await adminFetch<{ users?: AuthUser[] }>(
+    cfg,
+    `/auth/v1/admin/users?filter=${filter}&per_page=50`,
+    { method: "GET" },
+  );
+  if (list.status < 200 || list.status >= 300) {
+    throw new Error(
+      `supabase admin users lookup failed (${list.status}): ${extractErrorMessage(list.body)}`,
+    );
+  }
+  const wanted = email.toLowerCase();
+  return list.body?.users?.find((u) => (u.email ?? "").toLowerCase() === wanted) ?? null;
+}
+
+/**
+ * email + password で GoTrue のログインを試し、成否だけを返す。トークンは保持しない。
+ *
+ * service-role の Authorization ヘッダは付けない。本人のログイン試行として
+ * 素直に判定させるため、apikey だけで叩く。
+ *
+ * 400/401 は「パスワード不一致」。それ以外の異常は throw する
+ * （Supabase 障害を「不一致」に化けさせると、正しいパスワードの顧客を締め出す）。
+ */
+export async function verifyPassword(
+  cfg: SupabaseAdminConfig,
+  email: string,
+  password: string,
+): Promise<boolean> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: { apikey: cfg.serviceRoleKey, "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    },
+  );
+  if (resp.ok) return true;
+  if (resp.status === 400 || resp.status === 401) return false;
+  throw new Error(`supabase password verify failed (${resp.status}): ${await resp.text()}`);
+}
+
+/**
+ * パスワード再設定メールを送る。
+ * GoTrue は未登録のメールアドレスでも 200 を返す（列挙防止）。
+ */
+export async function sendRecoveryEmail(
+  cfg: SupabaseAdminConfig,
+  email: string,
+  redirectTo: string,
+): Promise<void> {
+  const resp = await fetch(
+    `${cfg.url.replace(/\/$/, "")}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,
+    {
+      method: "POST",
+      headers: { apikey: cfg.serviceRoleKey, "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(`supabase recover failed (${resp.status}): ${await resp.text()}`);
+  }
+}
+
+/**
+ * 再設定メール由来の access_token を使って本人のパスワードを更新する。
+ * トークンが無効・期限切れなら false（呼び出し側が 401 にする）。
+ */
+export async function updatePasswordWithToken(
+  cfg: SupabaseAdminConfig,
+  accessToken: string,
+  password: string,
+): Promise<boolean> {
+  const resp = await fetch(`${cfg.url.replace(/\/$/, "")}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: cfg.serviceRoleKey,
+      Authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  if (resp.ok) return true;
+  if (resp.status === 401 || resp.status === 403) return false;
+  throw new Error(`supabase password update failed (${resp.status}): ${await resp.text()}`);
+}
+
+/**
+ * Supabase Auth ユーザーを作る。既にそのメールアドレスのユーザーが居る場合は、
+ * **必ずパスワード認証を通してから**既存ユーザーを返す。
+ *
+ * 認証を挟まないと、他人のメールアドレスで申し込んだ契約が既存アカウントに
+ * 紐づいてしまい、本人には身に覚えのない二重課金として現れる。また、入力された
+ * パスワードは既存アカウントには反映されないため、「作成完了」と言われたのに
+ * ログインできない、という事故になる（2026-07-31 修正）。
  */
 export async function ensureUserExists(
   cfg: SupabaseAdminConfig,
@@ -128,18 +239,13 @@ export async function ensureUserExists(
     throw new Error(`supabase createUser failed (${created.status}): ${extractErrorMessage(created.body)}`);
   }
 
-  // GoTrue admin API の filter は PostgREST 構文ではなくプレーン文字列の
-  // 部分一致検索。部分一致で複数ヒットしうるので per_page を広げて
-  // 完全一致を探す。
-  const filter = encodeURIComponent(email);
-  const list = await adminFetch<{ users?: AuthUser[] }>(
-    cfg,
-    `/auth/v1/admin/users?filter=${filter}&per_page=50`,
-    { method: "GET" },
-  );
-  const existing = list.body?.users?.find((u) => u.email === email);
+  if (!(await verifyPassword(cfg, email, password))) {
+    throw new AccountPasswordMismatchError();
+  }
+
+  const existing = await findUserByEmail(cfg, email);
   if (!existing) {
-    throw new Error(`supabase lookup by email failed after conflict: ${extractErrorMessage(list.body)}`);
+    throw new Error(`supabase lookup by email failed after conflict: ${email}`);
   }
   return existing;
 }
