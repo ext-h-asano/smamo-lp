@@ -4,6 +4,7 @@ import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } fro
 import { normalizeCampaignCode } from "../_lib/campaign";
 import { isInitialFeeWaiverCode } from "../_lib/initial_fee";
 import {
+  AccountPasswordMismatchError,
   ensureUserExists,
   onboardChildViaParentCode,
   resolveAgencyByCode,
@@ -86,6 +87,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       body.name ?? "",
     );
   } catch (err) {
+    // 既存アカウント × パスワード不一致。Stripe には何も作らずにここで止める
+    // （このブロックは Stripe 呼び出しより手前にあるので、中断しても残骸は出ない）。
+    if (err instanceof AccountPasswordMismatchError) {
+      return jsonResponse(
+        {
+          error: "このメールアドレスは登録済みです。パスワードをご確認ください。",
+          code: "account_exists_password_mismatch",
+        },
+        409,
+      );
+    }
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[checkout] supabase user creation failed:", msg);
     return jsonResponse({ error: "アカウント作成に失敗しました。時間をおいて再度お試しください。" }, 500);
