@@ -32,7 +32,7 @@ interface AutoAssignArgs {
  *
  * - reason='ok'         → info 通知 + 残量 ≤ POOL_WARN_THRESHOLD なら warn 追加
  * - reason='already'    → No-op (通知なし、log のみ)
- * - reason='not_found'  → log のみ (subscription.created webhook 側で再試行されるので通知不要)
+ * - reason='not_found'  → log のみ (呼出元 provisionSubscription が同期して再試行するので通知不要)
  * - reason='exhausted'  → trial_end 凍結 + mark_waitlisted + warn 通知（mark 失敗時は critical）
  * - RPC エラー          → critical
  *
@@ -102,8 +102,8 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
 
   switch (data.reason) {
     case "not_found":
-      // subscription.created webhook 未着 (race)。subscription.created 側で
-      // 再度 autoAssign が呼ばれるので、ここでは log のみ。
+      // 契約行がまだ DB に無い (webhook の到着順は保証されない)。呼出元の
+      // provisionSubscription が syncSubscription してから再試行するので、ここでは log のみ。
       console.log(
         `[auto-provision] sub not in DB yet (race with subscription.created): sub=${subscriptionId} trigger=${triggerId}`,
       );

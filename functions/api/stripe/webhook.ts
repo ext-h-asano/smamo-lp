@@ -1,8 +1,12 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../../_lib/stripe";
 import { syncSubscription } from "../../_lib/subscription_sync";
-import { autoAssignContainer } from "../../_lib/auto_provisioning";
-import { sendProvisioningEmail } from "../../_lib/provisioning_email";
+import { provisionSubscription } from "../../_lib/auto_provisioning";
+import { sendDiscord } from "../../_lib/discord";
+import {
+  matchSubscriptionForSetupIntent,
+  shouldProvisionOnSubscriptionUpdate,
+} from "../../_lib/provisioning_rules";
 import { extractSubscriptionId, isCancelRequested } from "../../_lib/billing_rules";
 import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib/billing_email";
 
@@ -64,31 +68,16 @@ export async function handleStripeEvent(
           console.error(`[email] cancel-confirm error sub=${subEvent.id}: ${e}`);
         }
       }
-      // setup_intent.succeeded 側の autoAssign が race で reason='not_found'
-      // に倒れていた場合の救済。RPC は冪等 (advisory lock + reason='already')
-      // なので二重呼出 OK。
-      if (event.type === "customer.subscription.created") {
-        const customerId =
-          typeof subEvent.customer === "string"
-            ? subEvent.customer
-            : subEvent.customer.id;
-        let email: string | null = null;
-        try {
-          const customer = await stripe.customers.retrieve(customerId);
-          if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
-        } catch (e) {
-          console.warn(`[auto-provision] customer lookup failed: ${e}`);
-        }
-        const reason = await autoAssignContainer({
-          env,
-          stripe,
-          subscriptionId: subEvent.id,
-          customerEmail: email,
-          planKey: (subEvent.metadata?.plan_key as string | undefined) ?? null,
-          deviceName: (subEvent.metadata?.device_name as string | undefined) ?? null,
-          triggerId: event.id,
-        });
-        await sendProvisioningEmail(stripe, env, subEvent, reason);
+      // 払い出しは「カード確定後」だけ。created はカード入力前に発火するので割り当てない。
+      // ここは setup_intent.succeeded を取りこぼした場合の安全網で、支払い方法が
+      // 未設定→設定に遷移した瞬間だけ発火する。already ではメールを送らない。
+      if (
+        shouldProvisionOnSubscriptionUpdate(
+          event.data.previous_attributes as Record<string, unknown> | undefined,
+          subEvent,
+        )
+      ) {
+        await provisionSubscription(stripe, env, subEvent, event.id, { emailOnAlready: false });
       }
       break;
     }
@@ -133,46 +122,33 @@ async function onSetupIntentSucceeded(
   env: Env,
   si: Stripe.SetupIntent,
 ): Promise<void> {
-  // SetupIntent succeeded はカード登録完了 (trial 開始) のタイミング。
-  // コンテナを自動割当し、その結果 (reason) に応じてメール種別を決める。
-  // Welcome / 順番待ち メールはそれぞれ idempotencyKey=welcome:/waitlist:<sub.id> で
-  // 重複送信を防ぐ。
+  // setup_intent.succeeded = カード登録完了。ここが払い出しの主経路。
   if (!si.customer) {
     console.log(`[email] setup_intent.succeeded but no customer attached si=${si.id}`);
     return;
   }
   const customerId = typeof si.customer === "string" ? si.customer : si.customer.id;
 
-  // 直近で作られた当該 customer のサブスクを取得して autoAssign の引数に使う。
-  let email: string | null = null;
-  try {
-    const customer = await stripe.customers.retrieve(customerId);
-    if (!customer.deleted) email = (customer as Stripe.Customer).email ?? null;
-  } catch (e) {
-    console.warn(`[auto-provision] customer lookup failed: ${e}`);
-  }
+  // 契約は /api/checkout が書き込んだ metadata.subscription_id で一意に特定する。
+  // (成功後は sub.pending_setup_intent が null になるため逆引きできない)
+  const subs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
+  const sub = matchSubscriptionForSetupIntent(si, subs.data);
 
-  const subs = await stripe.subscriptions.list({ customer: customerId, limit: 5 });
-  const sub = subs.data.find((s) => s.status === "trialing" || s.status === "active") ?? subs.data[0];
-
-  // ---- コンテナ自動割当 ----
-  // sub が無い (= subscription 未確定) なら割当もできないので skip
-  if (sub) {
-    const reason = await autoAssignContainer({
-      env,
-      stripe,
-      subscriptionId: sub.id,
-      customerEmail: email,
-      planKey: (sub.metadata?.plan_key as string | undefined) ?? null,
-      deviceName: (sub.metadata?.device_name as string | undefined) ?? null,
-      triggerId: si.id,
+  if (!sub) {
+    // カードは通っているのに割当先が分からない = 取り逃し確定。必ず人間が気付く必要がある。
+    await sendDiscord(env, "critical", {
+      title: "🚨 カード登録成功だが対象契約を特定できない",
+      fields: [
+        { name: "setup_intent", value: si.id },
+        { name: "customer", value: customerId },
+        { name: "subscription_id(metadata)", value: si.metadata?.subscription_id ?? "(unset)" },
+        { name: "action", value: "Stripe で契約を確認し、手動 /assign-user で割当してください" },
+      ],
     });
-    await sendProvisioningEmail(stripe, env, sub, reason);
-  } else {
-    console.warn(
-      `[auto-provision] no subscription found for customer=${customerId} si=${si.id}, skip`,
-    );
+    return;
   }
+
+  await provisionSubscription(stripe, env, sub, si.id, { emailOnAlready: true });
 }
 
 async function onInvoicePaid(stripe: Stripe, env: Env, invoice: Stripe.Invoice): Promise<void> {
