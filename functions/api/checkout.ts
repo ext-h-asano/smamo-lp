@@ -251,6 +251,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return jsonResponse({ error: "no client secret returned from Stripe" }, 500);
   }
 
+  // setup_intent.succeeded webhook から契約を一意に特定するための紐付け。
+  // カード登録が成功すると Stripe は subscription.pending_setup_intent を null にするため、
+  // 後から逆引きできない。client_secret をブラウザに返す前に必ず書き込む。
+  // 失敗しても申込は止めない（webhook 側が旧来の推測にフォールバックする）。
+  try {
+    await stripe.setupIntents.update(setupIntent.id, {
+      metadata: { subscription_id: subscription.id, supabase_user_id: supabaseUser.id },
+    });
+  } catch (err) {
+    console.error(
+      `[checkout] setup intent の紐付け書き込みに失敗 si=${setupIntent.id} sub=${subscription.id}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
   return jsonResponse({
     client_secret: clientSecret,
     subscription_id: subscription.id,
