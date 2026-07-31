@@ -4267,17 +4267,6 @@ img {
     }
 }
 
-.ref-applied {
-    margin: 8px 0 0;
-    padding: 8px 12px;
-    background: #eef7ee;
-    border: 1px solid #cfe6cf;
-    border-radius: 6px;
-    color: #1e6b2e;
-    font-size: 13px;
-    font-weight: 600;
-}
-
 /* 紹介リンク経由で自動適用・ロックされた招待コード欄 */
 #invitationCode.locked {
     background: #f0f0f0;

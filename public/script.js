@@ -538,9 +538,9 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
 
     // 紹介リンク経由のアトリビューション（?ref=CODE）。
-    // 有効なら招待コード欄へ自動セット + ロック（顧客が消せない=代理店の成果を確実に紐付け）+ バナー表示。
+    // 有効なら招待コード欄へ自動セット + ロック（顧客が消せない=代理店の成果を確実に紐付け）。
+    // 代理店名・紹介コードのバナーは出さない（どの代理店経由かを申込者に見せない方針）。
     // 無効・失敗は静かに無視し、申込は必ず通す。手入力の招待コード欄は編集可のまま。
-    const refApplied = document.getElementById('refApplied');
     const invitationInput = document.getElementById('invitationCode');
     if (!isAddDeviceMode && invitationInput) {
         const refCode = SmamoRef.extractRefCode(
@@ -555,16 +555,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         // リンク経由の適用はロック：顧客が消したり書き換えたりできないようにする
                         invitationInput.readOnly = true;
                         invitationInput.classList.add('locked');
-                        if (refApplied) {
-                            if (data.kind === 'parent_onboard') {
-                                refApplied.textContent =
-                                    (data.agency_name || data.code) + ' の代理店登録リンク適用中';
-                            } else {
-                                refApplied.textContent =
-                                    '紹介コード ' + (data.agency_name || data.code) + ' 適用中';
-                            }
-                            refApplied.hidden = false;
-                        }
                         applyInitialFeeWaiver(Boolean(data.waives_initial_fee), ++invitationCheckSeq);
                     } else {
                         sessionStorage.removeItem('smamo_ref');
@@ -579,7 +569,6 @@ document.addEventListener('DOMContentLoaded', () => {
         invitationInput.addEventListener('input', () => {
             if (!isAddDeviceMode && invitationInput.value.trim() === '') {
                 sessionStorage.removeItem('smamo_ref');
-                if (refApplied) refApplied.hidden = true;
             }
             scheduleInvitationWaiverCheck(invitationInput.value);
         });
