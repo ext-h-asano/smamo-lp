@@ -16,7 +16,6 @@ import {
 
 interface CheckoutRequest {
   plan: PlanKey;
-  with_sms: boolean;
   email: string;
   name?: string;
   password: string;
@@ -181,12 +180,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     });
   }
 
+  // SMS 受信番号は 2026-07 の v8 料金改定で全プランの基本料金に内包された。
+  // STRIPE_PRICE_SMS_OPTION (+¥550/月) を足すと二重課金になるので絶対に足さない。
   const items: Stripe.SubscriptionCreateParams.Item[] = [{ price: plan.priceId }];
-  if (body.with_sms) items.push({ price: env.STRIPE_PRICE_SMS_OPTION });
 
   const metadata: Record<string, string> = {
     plan_key: body.plan,
-    with_sms: String(body.with_sms),
     supabase_user_id: supabaseUser.id,
     flow_mode: body.mode === "add_device" ? "add_device" : "signup",
   };

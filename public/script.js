@@ -387,9 +387,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitBtnStep2 = document.getElementById('submitBtnStep2');
     const accountTerms = document.getElementById('accountTerms');
     const accountTermsGroup = document.getElementById('accountTermsGroup');
-    const smsOptionStep2 = document.getElementById('smsOptionStep2');
-    const planOptionDivider = document.getElementById('planOptionDivider');
-    const planOptionRow = document.getElementById('planOptionRow');
     const planSummaryTitle = document.getElementById('planSummaryTitle');
     const planSummaryPrice = document.getElementById('planSummaryPrice');
     const planSummaryUnit = document.getElementById('planSummaryUnit');
@@ -461,7 +458,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (planInitialFeeRow) planInitialFeeRow.style.display = showInitFee ? 'flex' : 'none';
         if (planInitialFeeAmount) planInitialFeeAmount.textContent = formatYen(INITIAL_FEE_TAX_INCL);
         if (planInitialFeeWaivedRow) planInitialFeeWaivedRow.style.display = showWaived ? 'flex' : 'none';
-        updatePlanOptionSummary();
     }
 
     // --- 招待コードの検証 ---------------------------------------------------
@@ -514,12 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setInvitationError(blocked);
             return !blocked;
         });
-    }
-
-    function updatePlanOptionSummary() {
-        const isChecked = Boolean(smsOptionStep2?.checked);
-        if (planOptionDivider) planOptionDivider.style.display = isChecked ? 'block' : 'none';
-        if (planOptionRow) planOptionRow.style.display = isChecked ? 'flex' : 'none';
     }
 
     // ?email=xxx で来た場合（例: アプリ「再契約」導線）にフォームへ prefill +
@@ -760,7 +750,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     elements = null;
                 }
                 paymentElementMounted = false;
-                updatePlanOptionSummary();
                 setPasswordError('');
                 setExistingAccount(false);
                 // フォームリセットで招待コード欄が空になるため、初期費用の表示も再判定する
@@ -840,7 +829,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Switch to step 2 and mount Payment Element
-            if (smsOptionStep2) smsOptionStep2.checked = false;
             applicationFormStep2?.reset();
             updatePlanSummaryCard();
             const emailEl = document.getElementById('email');
@@ -887,14 +875,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const name = document.getElementById('name')?.value || '';
                 const email = document.getElementById('email')?.value || '';
                 const password = document.getElementById('password')?.value || '';
-                const withSms = Boolean(smsOptionStep2?.checked);
 
                 const resp = await fetch('/api/checkout', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({
                         plan: selectedPlan,
-                        with_sms: withSms,
                         email,
                         name,
                         password,
@@ -938,10 +924,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        smsOptionStep2?.addEventListener('change', updatePlanOptionSummary);
         accountTerms?.addEventListener('change', updateAccountSubmitState);
         updateAccountSubmitState();
-        updatePlanOptionSummary();
     }
 
     // 6. Dynamic Count-up for Main Visual
