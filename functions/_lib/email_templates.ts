@@ -7,7 +7,10 @@ interface WelcomeEmailVars {
   portalUrl?: string;
 }
 
-const APP_DOWNLOAD_LINK = "https://apps.apple.com/jp/app/simple%E9%9B%BB%E5%8D%93/id6742208241";
+const APP_DOWNLOAD_IOS = "https://apps.apple.com/jp/app/simple%E9%9B%BB%E5%8D%93/id6742208241";
+const APP_DOWNLOAD_ANDROID = "https://play.google.com/store/apps/details?id=cx.ext.smamo";
+const QR_IOS_IMG = "https://smamo.jp/img/qr-ios.png";
+const QR_ANDROID_IMG = "https://smamo.jp/img/qr-android.png";
 
 function escape(s: string): string {
   return s
@@ -37,7 +40,13 @@ ${vars.name && vars.name.trim() !== "" ? `${vars.name} 様` : "SMAMO をご利�
 【アプリのダウンロード】
 お手持ちのスマートフォンに SMAMO アプリをインストールし、
 登録したメールアドレスとパスワードでログインしてご利用ください。
-${APP_DOWNLOAD_LINK}
+（ストアでは「計算機」等の名称で表示されます）
+
+iOS (App Store):
+${APP_DOWNLOAD_IOS}
+
+Android (Google Play):
+${APP_DOWNLOAD_ANDROID}
 
 【サブスクリプションの管理】
 お支払い方法の変更や解約はアプリ内の「設定 > ご解約について」から
@@ -83,8 +92,34 @@ https://smamo.jp/
         </td></tr>
         <tr><td style="padding:0 40px 24px;font-size:15px;line-height:1.7;color:#374151;">
           <h2 style="margin:0 0 8px;font-size:16px;color:#111827;">アプリのダウンロード</h2>
-          <p style="margin:0 0 12px;">お手持ちのスマートフォンに SMAMO アプリをインストールし、登録したメールアドレスとパスワードでログインしてご利用ください。</p>
-          <p style="margin:0;"><a href="${APP_DOWNLOAD_LINK}" style="display:inline-block;background:#0a84ff;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:24px;font-weight:600;">アプリをダウンロード</a></p>
+          <p style="margin:0 0 16px;">お手持ちのスマートフォンに SMAMO アプリをインストールし、登録したメールアドレスとパスワードでログインしてご利用ください。<br><span style="color:#6b7280;font-size:13px;">※ストアでは「計算機」等の名称で表示されます。</span></p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td width="50%" valign="top" style="padding:0 8px 0 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;">
+                  <tr><td align="center" style="padding:16px 12px 8px;font-size:13px;font-weight:700;color:#111827;">iOS / App Store</td></tr>
+                  <tr><td align="center" style="padding:0 12px 12px;">
+                    <img src="${QR_IOS_IMG}" width="120" height="120" alt="App Store QR" style="display:block;border:0;border-radius:8px;">
+                  </td></tr>
+                  <tr><td align="center" style="padding:0 12px 16px;">
+                    <a href="${APP_DOWNLOAD_IOS}" style="display:inline-block;background:#0a84ff;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:20px;font-weight:600;font-size:13px;">App Store</a>
+                  </td></tr>
+                </table>
+              </td>
+              <td width="50%" valign="top" style="padding:0 0 0 8px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;">
+                  <tr><td align="center" style="padding:16px 12px 8px;font-size:13px;font-weight:700;color:#111827;">Android / Google Play</td></tr>
+                  <tr><td align="center" style="padding:0 12px 12px;">
+                    <img src="${QR_ANDROID_IMG}" width="120" height="120" alt="Google Play QR" style="display:block;border:0;border-radius:8px;">
+                  </td></tr>
+                  <tr><td align="center" style="padding:0 12px 16px;">
+                    <a href="${APP_DOWNLOAD_ANDROID}" style="display:inline-block;background:#34a853;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:20px;font-weight:600;font-size:13px;">Google Play</a>
+                  </td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">パソコンから見ている場合は、上の QR コードをスマートフォンで読み取ってインストールできます。</p>
         </td></tr>
         <tr><td style="padding:0 40px 24px;font-size:14px;line-height:1.7;color:#6b7280;">
           <h2 style="margin:0 0 8px;font-size:16px;color:#111827;">サブスクリプションの管理</h2>
