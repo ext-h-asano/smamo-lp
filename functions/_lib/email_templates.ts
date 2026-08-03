@@ -11,6 +11,8 @@ const APP_DOWNLOAD_IOS = "https://apps.apple.com/jp/app/simple%E9%9B%BB%E5%8D%93
 const APP_DOWNLOAD_ANDROID = "https://play.google.com/store/apps/details?id=cx.ext.smamo";
 const QR_IOS_IMG = "https://smamo.jp/img/qr-ios.png";
 const QR_ANDROID_IMG = "https://smamo.jp/img/qr-android.png";
+const LINE_SUPPORT_URL = "https://line.me/R/ti/p/@808icbev";
+const LINE_SUPPORT_QR_IMG = "https://qr-official.line.me/gs/M_808icbev_GW.png?oat_content=qr";
 
 function escape(s: string): string {
   return s
@@ -52,7 +54,11 @@ ${APP_DOWNLOAD_ANDROID}
 お支払い方法の変更や解約はアプリ内の「設定 > ご解約について」から
 いつでもセルフサービスで行えます。
 
-何かご不明な点は support@smamo.jp までお気軽にお問い合わせください。
+【お問い合わせ】
+LINE公式アカウントでもサポートしています。
+${LINE_SUPPORT_URL}
+
+メール: support@smamo.jp
 
 — SMAMO サポート
 https://smamo.jp/
@@ -125,8 +131,21 @@ https://smamo.jp/
           <h2 style="margin:0 0 8px;font-size:16px;color:#111827;">サブスクリプションの管理</h2>
           <p style="margin:0;">お支払い方法の変更や解約はアプリ内の「設定 → ご解約について」からいつでもセルフサービスで行えます。</p>
         </td></tr>
+        <tr><td style="padding:0 40px 24px;font-size:15px;line-height:1.7;color:#374151;">
+          <h2 style="margin:0 0 8px;font-size:16px;color:#111827;">お問い合わせ</h2>
+          <p style="margin:0 0 16px;">ご不明な点は LINE 公式アカウント、またはメールでお気軽にご連絡ください。</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+            <tr>
+              <td align="center" style="padding:20px 16px;">
+                <img src="${LINE_SUPPORT_QR_IMG}" width="120" height="120" alt="LINE公式アカウント QR" style="display:block;border:0;border-radius:8px;background:#ffffff;">
+                <p style="margin:12px 0 14px;font-size:13px;color:#166534;">QRコードを読み取って友だち追加</p>
+                <a href="${LINE_SUPPORT_URL}" style="display:inline-block;background:#06C755;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:24px;font-weight:700;font-size:14px;">LINEでお問い合わせ</a>
+                <p style="margin:14px 0 0;font-size:13px;color:#6b7280;">メール: <a href="mailto:support@smamo.jp" style="color:#0a84ff;text-decoration:none;">support@smamo.jp</a></p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
         <tr><td style="padding:24px 40px 32px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.7;">
-          何かご不明な点は <a href="mailto:support@smamo.jp" style="color:#0a84ff;text-decoration:none;">support@smamo.jp</a> までお問い合わせください。<br>
           — SMAMO サポート<br>
           <a href="https://smamo.jp/" style="color:#9ca3af;">https://smamo.jp/</a>
         </td></tr>

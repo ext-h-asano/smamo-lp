@@ -145,6 +145,51 @@
             color: #ffffff;
         }
 
+        .contact-card__link--line {
+            background: #06C755;
+            color: #ffffff;
+            gap: 8px;
+        }
+
+        .contact-card__link--line img {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
+
+        .contact-line-qr {
+            width: 148px;
+            height: 148px;
+            margin: 0 auto 16px;
+            padding: 10px;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+        }
+
+        .contact-line-qr img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .contact-line-caption {
+            margin: 0 0 18px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.58);
+            text-align: center;
+        }
+
+        .contact-card--line {
+            text-align: center;
+        }
+
+        .contact-card--line .contact-card__text {
+            text-align: left;
+        }
+
         .contact-info-row {
             display: flex;
             align-items: center;
@@ -301,6 +346,19 @@
         <section class="contact-section">
             <div class="container">
                 <div class="contact-grid">
+                    <div class="contact-card contact-card--line" id="line">
+                        <h2 class="contact-card__title">LINEでのお問い合わせ</h2>
+                        <p class="contact-card__text">公式アカウントを友だち追加して、チャットでご相談ください。<br>サポート対応もこちらから受け付けています。</p>
+                        <div class="contact-line-qr">
+                            <img src="https://qr-official.line.me/gs/M_808icbev_GW.png?oat_content=qr" width="360" height="360" alt="SMAMO LINE公式アカウントのQRコード">
+                        </div>
+                        <p class="contact-line-caption">スマートフォンのカメラで読み取って友だち追加</p>
+                        <a href="https://line.me/R/ti/p/@808icbev" class="contact-card__link contact-card__link--line" target="_blank" rel="noopener noreferrer">
+                            <img src="img/ico-line.svg" alt="">
+                            LINEでお問い合わせ
+                        </a>
+                    </div>
+
                     <div class="contact-card">
                         <h2 class="contact-card__title">メールでのお問い合わせ</h2>
                         <p class="contact-card__text">ご質問・ご相談・ご解約のご依頼など、何でもお気軽にご連絡ください。<br>通常1営業日以内にご返信いたします。</p>
@@ -352,6 +410,7 @@
                     <a href="policy.html#security" rel="noopener noreferrer">情報セキュリティ基本方針</a>
                     <a href="policy.html#antisocial" rel="noopener noreferrer">反社会的勢力排除の方針</a>
                     <a href="policy.html#legal" rel="noopener noreferrer">特定商取引法に基づく表記</a>
+                    <a href="https://line.me/R/ti/p/@808icbev" target="_blank" rel="noopener noreferrer">LINEサポート</a>
                     <a href="https://ext.cx/" target="_blank" rel="noopener noreferrer">運営会社</a>
                 </nav>
                 <p class="copyright">© 2026 SMAMO. All rights reserved.<br class="sp-only">（無断転載および引用禁止）</p>
