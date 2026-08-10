@@ -9,11 +9,10 @@ import {
 } from "../../_lib/provisioning_rules";
 import { extractSubscriptionId, isCancelRequested } from "../../_lib/billing_rules";
 import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib/billing_email";
-
 // 2年契約の中途解約手数料は「契約中サブスクの実際の月額 × 残月数」。
 // 料金改定(旧¥5,478/新¥6,028)をまたいでも各契約者の実価格で請求するため、
-// サブスクの items から月額を取る。この定数は items が読めない場合の保険のみ。
-const TWO_YEAR_MONTHLY_FEE_FALLBACK_JPY = 5478;
+// 算出は _lib/cancellation_fee に集約し、アカウント削除の事前見積りと共有する。
+import { calculateCancellationFee } from "../../_lib/cancellation_fee";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -185,49 +184,42 @@ async function onSubscriptionDeleted(
   env: Env,
   subscription: Stripe.Subscription,
 ): Promise<void> {
-  const planKey = subscription.metadata?.plan_key;
-  const committedUntilIso = subscription.metadata?.committed_until;
+  const { remainingMonths, amount } = calculateCancellationFee({
+    planKey: subscription.metadata?.plan_key,
+    committedUntilIso: subscription.metadata?.committed_until,
+    unitAmounts: subscription.items.data.map((it) => it.price?.unit_amount ?? 0),
+    nowMs: Date.now(),
+  });
   let cancellationFee: number | null = null;
 
-  if (planKey === "two_year" && committedUntilIso) {
-    const committedUntil = new Date(committedUntilIso);
-    const remainingMs = committedUntil.getTime() - Date.now();
-    const remainingMonths = Math.ceil(remainingMs / (1000 * 60 * 60 * 24 * 30));
-    if (remainingMonths > 0) {
-      // items にはSMSオプション(¥550)が併存しうるので、最大額の項目＝プラン本体とみなす
-      const planMonthlyFee = Math.max(
-        0,
-        ...subscription.items.data.map((it) => it.price?.unit_amount ?? 0),
-      );
-      cancellationFee =
-        remainingMonths * (planMonthlyFee > 0 ? planMonthlyFee : TWO_YEAR_MONTHLY_FEE_FALLBACK_JPY);
-      const customerId =
-        typeof subscription.customer === "string"
-          ? subscription.customer
-          : subscription.customer.id;
+  if (amount > 0) {
+    cancellationFee = amount;
+    const customerId =
+      typeof subscription.customer === "string"
+        ? subscription.customer
+        : subscription.customer.id;
 
-      await stripe.invoiceItems.create({
-        customer: customerId,
-        amount: cancellationFee,
-        currency: "jpy",
-        description: `2年契約 中途解約手数料（残${remainingMonths}ヶ月分）`,
-        metadata: {
-          kind: "two_year_cancellation_fee",
-          subscription_id: subscription.id,
-          remaining_months: String(remainingMonths),
-        },
-      });
-      const invoice = await stripe.invoices.create({
-        customer: customerId,
-        auto_advance: true,
-        collection_method: "charge_automatically",
-        metadata: { kind: "two_year_cancellation_fee", subscription_id: subscription.id },
-      });
-      if (invoice.id) await stripe.invoices.finalizeInvoice(invoice.id);
-      console.log(
-        `[stripe] charged 2-year cancellation fee sub=${subscription.id} fee=¥${cancellationFee}`,
-      );
-    }
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      amount: cancellationFee,
+      currency: "jpy",
+      description: `2年契約 中途解約手数料（残${remainingMonths}ヶ月分）`,
+      metadata: {
+        kind: "two_year_cancellation_fee",
+        subscription_id: subscription.id,
+        remaining_months: String(remainingMonths),
+      },
+    });
+    const invoice = await stripe.invoices.create({
+      customer: customerId,
+      auto_advance: true,
+      collection_method: "charge_automatically",
+      metadata: { kind: "two_year_cancellation_fee", subscription_id: subscription.id },
+    });
+    if (invoice.id) await stripe.invoices.finalizeInvoice(invoice.id);
+    console.log(
+      `[stripe] charged 2-year cancellation fee sub=${subscription.id} fee=¥${cancellationFee}`,
+    );
   }
 
   await syncSubscription(stripe, env, subscription.id, { cancellationFee });
