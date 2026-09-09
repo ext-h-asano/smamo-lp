@@ -3,6 +3,29 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- LINEヤフー広告 計測タグ (グローバルスニペット) -->
+    <script async src="https://tag.flvcdn.net/lytag.js"></script>
+    <script>
+        window.lyDataLayer = window.lyDataLayer || [];
+        function lytag() {
+            lyDataLayer.push(Array.from(arguments));
+        }
+        lytag({
+            type: 'init',
+            tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c',
+            config: {
+                useCookie: true,
+                useLocalStorage: true
+            }
+        });
+        lytag({
+            type: 'event',
+            eventType: 'page_view',
+            tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c'
+        });
+    </script>
+    <!-- 申込完了 (sign_up) / LINE 問い合わせ (generate_lead) のイベント発火 -->
+    <script defer src="/lytag-events.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="format-detection" content="telephone=no">
     <meta name="robots" content="noindex, nofollow, noarchive">
