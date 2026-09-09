@@ -10,19 +10,24 @@
         function lytag() {
             lyDataLayer.push(Array.from(arguments));
         }
-        lytag({
-            type: 'init',
-            tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c',
-            config: {
-                useCookie: true,
-                useLocalStorage: true
-            }
-        });
-        lytag({
-            type: 'event',
-            eventType: 'page_view',
-            tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c'
-        });
+        // 計測対象は本番 (smamo.jp) のみ。dev.smamo.jp や *.pages.dev のプレビューは
+        // 同じコードから配信されるため、ここで絞らないと開発中のテスト申込が
+        // コンバージョンとして計上され、広告の自動最適化を狂わせる。
+        if (location.hostname === 'smamo.jp' || location.hostname === 'www.smamo.jp') {
+            lytag({
+                type: 'init',
+                tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c',
+                config: {
+                    useCookie: true,
+                    useLocalStorage: true
+                }
+            });
+            lytag({
+                type: 'event',
+                eventType: 'page_view',
+                tagId: 'fd83709f-6cae-4d2b-b17c-006dd993216c'
+            });
+        }
     </script>
     <!-- 申込完了 (sign_up) / LINE 問い合わせ (generate_lead) のイベント発火 -->
     <script defer src="/lytag-events.js"></script>

@@ -8,8 +8,12 @@
     'use strict';
 
     var TAG_ID = 'fd83709f-6cae-4d2b-b17c-006dd993216c';
+    // グローバルスニペット側と同じ条件。dev.smamo.jp でのテスト申込やテストクリックを
+    // コンバージョンとして計上しない（本番の広告最適化を汚さないため）。
+    var MEASURED_HOSTS = ['smamo.jp', 'www.smamo.jp'];
 
     function send(eventType) {
+        if (MEASURED_HOSTS.indexOf(window.location.hostname) === -1) return;
         // グローバルスニペットが無いページや広告ブロッカー環境では黙って何もしない。
         if (typeof window.lytag !== 'function') return;
         window.lytag({ type: 'event', eventType: eventType, tagId: TAG_ID });

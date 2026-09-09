@@ -17,6 +17,7 @@ type Event = { type: string; eventType: string; tagId: string };
  */
 function load(opts: {
   search?: string;
+  hostname?: string;
   hasGlobalSnippet?: boolean;
   storage?: Map<string, string> | null;
 } = {}) {
@@ -25,7 +26,7 @@ function load(opts: {
   let clickHandler: ((e: unknown) => void) | null = null;
 
   const win: Record<string, unknown> = {
-    location: { search: opts.search ?? "" },
+    location: { search: opts.search ?? "", hostname: opts.hostname ?? "smamo.jp" },
   };
   if (opts.hasGlobalSnippet !== false) {
     win.lytag = (payload: Event) => sent.push(payload);
@@ -133,6 +134,26 @@ describe("generate_lead (LINE 問い合わせ)", () => {
     t.click("https://line.me/R/ti/p/@808icbev");
     t.click("https://line.me/R/ti/p/@808icbev");
     expect(t.sent).toHaveLength(2);
+  });
+});
+
+describe("本番ドメイン以外", () => {
+  const SIGNUP = "?setup_intent=seti_1&redirect_status=succeeded";
+
+  it("dev.smamo.jp のテスト申込は計上しない", () => {
+    const t = load({ hostname: "dev.smamo.jp", search: SIGNUP });
+    t.click("https://line.me/R/ti/p/@808icbev");
+    expect(t.sent).toEqual([]);
+  });
+
+  it("Pages のプレビュー URL でも計上しない", () => {
+    const t = load({ hostname: "53b47312.smamo-lp.pages.dev", search: SIGNUP });
+    t.click("https://line.me/R/ti/p/@808icbev");
+    expect(t.sent).toEqual([]);
+  });
+
+  it("www 付きの本番ドメインは計上する", () => {
+    expect(load({ hostname: "www.smamo.jp", search: SIGNUP }).sent).toHaveLength(1);
   });
 });
 
