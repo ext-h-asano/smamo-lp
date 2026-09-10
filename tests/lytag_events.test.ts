@@ -10,6 +10,16 @@ const SRC = readFileSync(
 const TAG_ID = "fd83709f-6cae-4d2b-b17c-006dd993216c";
 
 type Event = { type: string; eventType: string; tagId: string };
+type YssConversion = { type: string; config: Record<string, string> };
+
+const YSS_CONVERSION: YssConversion = {
+  type: "yss_conversion",
+  config: {
+    yahoo_conversion_id: "1001411679",
+    yahoo_conversion_label: "cOCDCLKQ0vIcELGHttdE",
+    yahoo_conversion_value: "0",
+  },
+};
 
 /**
  * lytag-events.js を実ブラウザに似せた偽の window/document 上で実行する。
@@ -18,18 +28,27 @@ type Event = { type: string; eventType: string; tagId: string };
 function load(opts: {
   search?: string;
   hostname?: string;
+  /** <head> のグローバルスニペットが両方とも無い状態 (広告ブロッカー等) */
   hasGlobalSnippet?: boolean;
+  /** LINEヤフー広告 (lytag) だけの有無 */
+  hasLytag?: boolean;
+  /** Yahoo!検索広告 (ytag) だけの有無 */
+  hasYtag?: boolean;
   storage?: Map<string, string> | null;
 } = {}) {
   const sent: Event[] = [];
+  const yss: YssConversion[] = [];
   const store = opts.storage === undefined ? new Map<string, string>() : opts.storage;
   let clickHandler: ((e: unknown) => void) | null = null;
 
   const win: Record<string, unknown> = {
     location: { search: opts.search ?? "", hostname: opts.hostname ?? "smamo.jp" },
   };
-  if (opts.hasGlobalSnippet !== false) {
+  if (opts.hasLytag ?? opts.hasGlobalSnippet ?? true) {
     win.lytag = (payload: Event) => sent.push(payload);
+  }
+  if (opts.hasYtag ?? opts.hasGlobalSnippet ?? true) {
+    win.ytag = (payload: YssConversion) => yss.push(payload);
   }
 
   const sandbox = {
@@ -56,6 +75,7 @@ function load(opts: {
 
   return {
     sent,
+    yss,
     /** href を持つ <a> の中の要素をクリックしたことにする */
     click(href: string | null) {
       const link = href === null ? null : { href };
@@ -162,5 +182,51 @@ describe("グローバルスニペットが無い環境", () => {
     const t = load({ hasGlobalSnippet: false, search: "?setup_intent=seti_1&redirect_status=succeeded" });
     expect(() => t.click("https://line.me/R/ti/p/@808icbev")).not.toThrow();
     expect(t.sent).toEqual([]);
+  });
+});
+
+describe("yss_conversion (Yahoo!検索広告のコンバージョン測定)", () => {
+  const SIGNUP = "?setup_intent=seti_123&redirect_status=succeeded";
+
+  it("申込完了で sign_up と同時に発火する", () => {
+    const t = load({ search: SIGNUP });
+    expect(t.sent).toEqual([{ type: "event", eventType: "sign_up", tagId: TAG_ID }]);
+    expect(t.yss).toEqual([YSS_CONVERSION]);
+  });
+
+  it("/thankyou を直接開いただけでは発火しない", () => {
+    expect(load({ search: "" }).yss).toEqual([]);
+  });
+
+  it("失敗して戻ってきたときは発火しない", () => {
+    expect(load({ search: "?setup_intent=seti_123&redirect_status=failed" }).yss).toEqual([]);
+  });
+
+  it("同じ申込のリロードでは二重に発火しない", () => {
+    const store = new Map<string, string>();
+    expect(load({ search: SIGNUP, storage: store }).yss).toHaveLength(1);
+    expect(load({ search: SIGNUP, storage: store }).yss).toHaveLength(0);
+  });
+
+  it("dev.smamo.jp のテスト申込は計上しない", () => {
+    expect(load({ hostname: "dev.smamo.jp", search: SIGNUP }).yss).toEqual([]);
+  });
+
+  it("LINE ボタンのクリックでは発火しない (検索広告の CV は申込完了のみ)", () => {
+    const t = load();
+    t.click("https://line.me/R/ti/p/@808icbev");
+    expect(t.yss).toEqual([]);
+  });
+
+  it("ytag が無くても lytag 側は発火する", () => {
+    const t = load({ search: SIGNUP, hasYtag: false });
+    expect(t.sent).toHaveLength(1);
+    expect(t.yss).toEqual([]);
+  });
+
+  it("lytag が無くても ytag 側は発火する", () => {
+    const t = load({ search: SIGNUP, hasLytag: false });
+    expect(t.sent).toEqual([]);
+    expect(t.yss).toEqual([YSS_CONVERSION]);
   });
 });

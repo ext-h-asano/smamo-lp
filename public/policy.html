@@ -29,7 +29,17 @@
             });
         }
     </script>
-    <!-- 申込完了 (sign_up) / LINE 問い合わせ (generate_lead) のイベント発火 -->
+    <!-- Yahoo!検索広告 サイトジェネラルタグ -->
+    <script async src="https://s.yimg.jp/images/listing/tool/cv/ytag.js"></script>
+    <script>
+        window.yjDataLayer = window.yjDataLayer || [];
+        function ytag() { yjDataLayer.push(arguments); }
+        // 上の lytag と同じ理由で本番のみ。dev のテスト申込を検索広告の CV に混ぜない。
+        if (location.hostname === 'smamo.jp' || location.hostname === 'www.smamo.jp') {
+            ytag({ "type": "ycl_cookie", "config": { "ycl_use_non_cookie_storage": true } });
+        }
+    </script>
+    <!-- 申込完了 (sign_up / yss_conversion) / LINE 問い合わせ (generate_lead) のイベント発火 -->
     <script defer src="/lytag-events.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
