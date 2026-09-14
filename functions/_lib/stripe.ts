@@ -22,6 +22,12 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Discord webhook URL (provisioning 結果通知用)。未設定なら通知を skip するだけ */
   DISCORD_WEBHOOK_URL?: string;
+  /** LINE Messaging API webhook の署名検証用 Channel Secret */
+  LINE_CHANNEL_SECRET?: string;
+  /** LINE 受信メッセージ専用の Discord webhook URL */
+  LINE_DISCORD_WEBHOOK_URL?: string;
+  /** 送信者プロフィール取得用。未設定でも userId 付きで通知できる */
+  LINE_CHANNEL_ACCESS_TOKEN?: string;
   /** 割当成功後のプール残量がこの値以下なら warn 通知。数値文字列。デフォルト "3" */
   POOL_WARN_THRESHOLD?: string;
   /** 初期費用 ¥33,000 を免除する招待コード（カンマ区切り、大文字小文字問わず）。例: "P-9A22DB44"（パビオ本体）。未設定なら誰も免除しない */
