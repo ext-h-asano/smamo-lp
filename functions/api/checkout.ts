@@ -3,6 +3,7 @@ import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
 import { normalizeCampaignCode } from "../_lib/campaign";
 import { isInitialFeeWaiverCode } from "../_lib/initial_fee";
+import { cancelStaleSignupSubscription, selectStaleSignupSubscriptions } from "../_lib/stale_signup";
 import {
   AccountPasswordMismatchError,
   ensureUserExists,
@@ -162,8 +163,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
   let customer: Stripe.Customer;
+  let isExistingCustomer = false;
   if (existing.data[0]) {
     customer = existing.data[0];
+    isExistingCustomer = true;
     // 既存 Customer に preferred_locales が無ければ日本語に設定し直す
     // (Stripe からの自動メールを日本語版で送らせるため)
     if (!customer.preferred_locales?.length) {
@@ -178,6 +181,25 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       preferred_locales: ["ja"],
       metadata: { source: "smamo-lp", supabase_user_id: supabaseUser.id },
     });
+  }
+
+  // 層1: 前回の申込がカード確定に失敗（3D セキュア失敗・入力画面から離脱）して残した
+  // 幽霊契約を、新しい契約を作る前にキャンセルしておく。放置すると trialing のまま
+  // 3 日後に二重請求される（Stripe の incomplete_expired は trialing には効かない）。
+  // ベストエフォート: 失敗しても申込は止めない（層2 の毎時スイープが回収する）。
+  if (isExistingCustomer) {
+    try {
+      const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 100 });
+      const stale = selectStaleSignupSubscriptions(subs.data, supabaseUser.id);
+      for (const s of stale) {
+        await cancelStaleSignupSubscription(stripe, s);
+      }
+    } catch (err) {
+      console.error(
+        `[checkout] 前回のカード未確定契約のクリーンアップに失敗 cus=${customer.id} user=${supabaseUser.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   // SMS 受信番号は 2026-07 の v8 料金改定で全プランの基本料金に内包された。
