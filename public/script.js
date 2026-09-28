@@ -395,7 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const planInitialFeeAmount = document.getElementById('planInitialFeeAmount');
     const planInitialFeeWaivedRow = document.getElementById('planInitialFeeWaivedRow');
     const invitationBenefit = document.getElementById('invitationBenefit');
-    const existingAccountNotice = document.getElementById('existingAccountNotice');
     const passwordResetHelp = document.getElementById('passwordResetHelp');
     const accountSuccessLabel = document.getElementById('accountSuccessLabel');
     const paymentElementContainer = document.getElementById('payment-element');
@@ -646,7 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setExistingAccount(isExisting) {
         existingAccountConfirmed = Boolean(isExisting);
-        if (existingAccountNotice) existingAccountNotice.hidden = !existingAccountConfirmed;
         if (accountSuccessLabel) {
             accountSuccessLabel.textContent =
                 existingAccountConfirmed ? '既存アカウントに追加します' : 'アカウント作成完了';
