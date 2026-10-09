@@ -61,5 +61,11 @@ export function firstChargeAmountJpy(
 export function firstChargeAmountForSubscription(metadata?: Record<string, string> | null): number {
   const planKey = (metadata?.plan_key as PlanKey | undefined) ?? "monthly";
   const withSms = metadata?.with_sms === "true";
-  return firstChargeAmountJpy(planKey, withSms, isSubscriptionInitialFeeWaived(metadata));
+  const amount = firstChargeAmountJpy(planKey, withSms, isSubscriptionInitialFeeWaived(metadata));
+  // 特別対応アカウントの恒久割引（checkout.ts が forever クーポンと一緒に記録する）
+  const special = Number(metadata?.special_monthly_jpy);
+  if (planKey === "monthly" && Number.isFinite(special) && special > 0) {
+    return amount - PLAN_AMOUNTS_JPY.monthly + special;
+  }
+  return amount;
 }

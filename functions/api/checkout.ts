@@ -3,6 +3,7 @@ import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getPlans, INITIAL_FEE_JPY, PLAN_DISPLAY_NAME, PlanKey, TRIAL_DAYS } from "../_lib/plans";
 import { normalizeCampaignCode } from "../_lib/campaign";
 import { isInitialFeeWaiverCode } from "../_lib/initial_fee";
+import { ensureSpecialMonthlyCoupon, specialMonthlyJpy, specialPricingFor } from "../_lib/special_pricing";
 import { cancelStaleSignupSubscription, selectStaleSignupSubscriptions } from "../_lib/stale_signup";
 import {
   AccountPasswordMismatchError,
@@ -163,8 +164,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // かつ紹介/オンボードが実際に紐付いた場合のみスキップ。
   // 判定は顧客が入力したコード文字列で行う（agencyId は親コード経由のオンボード成功時に
   // 子代理店の ID へ書き換わるため、ID からは入力コードを復元できない）。
-  const initialFeeWaived =
+  const codeWaived =
     Boolean(agencyId) && isInitialFeeWaiverCode(agencyCode, env.INITIAL_FEE_WAIVER_CODES);
+  // 個別の特別対応アカウント（special_pricing.ts）。初期費用免除と月額の恒久割引。
+  const special = specialPricingFor(body.email);
+  const specialWaived = Boolean(special?.initialFeeWaived);
+  const initialFeeWaived = codeWaived || specialWaived;
+  const specialMonthly = specialMonthlyJpy(special, body.plan);
 
   const existing = await stripe.customers.list({ email: body.email, limit: 1 });
   let customer: Stripe.Customer;
@@ -227,7 +233,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   // 招待コードで初期費用を無料化した場合、後からサポートで追えるよう記録を残す
   if (plan.hasInitialFee && initialFeeWaived) {
-    metadata.initial_fee_waived = "invitation_code";
+    metadata.initial_fee_waived = codeWaived ? "invitation_code" : "special_account";
+  }
+  if (specialMonthly !== null) {
+    metadata.special_monthly_jpy = String(specialMonthly);
   }
   if (agencyCode && agencyId) {
     metadata.agency_code = agencyCode;
@@ -244,9 +253,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ? `${body.device_name.trim()} (${PLAN_DISPLAY_NAME[body.plan]})`
     : PLAN_DISPLAY_NAME[body.plan];
 
+  const discounts = specialMonthly !== null
+    ? [{ coupon: await ensureSpecialMonthlyCoupon(stripe, specialMonthly) }]
+    : undefined;
+
   const subscription = await stripe.subscriptions.create({
     customer: customer.id,
     items,
+    ...(discounts ? { discounts } : {}),
     trial_period_days: TRIAL_DAYS,
     payment_behavior: "default_incomplete",
     payment_settings: {
@@ -268,7 +282,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       metadata: { kind: "initial_fee", plan_key: body.plan },
     });
   } else if (plan.hasInitialFee && initialFeeWaived) {
-    console.log(`[checkout] 招待コードにより初期費用無料: sub=${subscription.id} plan=${body.plan} agency=${agencyCode}`);
+    console.log(
+      `[checkout] 初期費用無料 (${metadata.initial_fee_waived}): sub=${subscription.id} plan=${body.plan} agency=${agencyCode}`,
+    );
   }
 
   const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent | null;
