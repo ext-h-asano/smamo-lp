@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   AccountPasswordMismatchError,
+  activatePendingUser,
   ensureUserExists,
   findUserByEmail,
   verifyPassword,
@@ -80,6 +81,7 @@ describe("ensureUserExists", () => {
       if (url.includes("grant_type=password")) {
         return jsonRes(400, { error: "invalid_grant", error_description: "Invalid login credentials" });
       }
+      if (url.includes("filter=")) return jsonRes(200, { users: [{ id: "u1", email: "a@example.com", app_metadata: {} }] });
       throw new Error(`unexpected call: ${url}`);
     });
 
@@ -87,8 +89,8 @@ describe("ensureUserExists", () => {
       ensureUserExists(cfg, "a@example.com", "wrongpassword", "山田"),
     ).rejects.toBeInstanceOf(AccountPasswordMismatchError);
 
-    // 不一致のときはユーザー情報を引きに行かない（存在情報を余計に触らない）
-    expect(calls.filter((u) => u.includes("filter=")).length).toBe(0);
+    // 仮アカウントかどうかを見るために引くが、更新はしない
+    expect(calls.filter((u) => /admin\/users\/u1/.test(u)).length).toBe(0);
   });
 
   it("パスワード検証中の Supabase 障害は不一致に化けさせない", async () => {
@@ -174,5 +176,67 @@ describe("verifyPassword", () => {
   it("500 は throw する", async () => {
     stubFetch(() => jsonRes(500, { msg: "boom" }));
     await expect(verifyPassword(cfg, "a@example.com", "password123")).rejects.toThrow();
+  });
+});
+
+describe("ensureUserExists — カード未登録の仮アカウント", () => {
+  it("新規作成は仮アカウント（pending_card + ban）で作る", async () => {
+    const bodies: string[] = [];
+    stubFetch((url, init) => {
+      if (url.includes("/auth/v1/admin/users") && init?.method === "POST") {
+        bodies.push(String(init.body));
+        return jsonRes(200, { id: "u1", email: "a@example.com" });
+      }
+      throw new Error(`unexpected call: ${url}`);
+    });
+    await ensureUserExists(cfg, "a@example.com", "password123", "山田");
+    const body = JSON.parse(bodies[0]);
+    expect(body.app_metadata).toEqual({ pending_card: true });
+    expect(body.ban_duration).toBe("876000h");
+  });
+
+  it("前回離脱した仮アカウントはパスワードを上書きして使い回す", async () => {
+    const puts: string[] = [];
+    stubFetch((url, init) => {
+      if (url.includes("/auth/v1/admin/users") && init?.method === "POST") return jsonRes(422, ALREADY_EXISTS);
+      if (url.includes("grant_type=password")) return jsonRes(400, { error: "user_banned" });
+      if (url.includes("filter=")) {
+        return jsonRes(200, { users: [{ id: "u1", email: "a@example.com", app_metadata: { pending_card: true } }] });
+      }
+      if (url.includes("/auth/v1/admin/users/u1") && init?.method === "PUT") {
+        puts.push(String(init.body));
+        return jsonRes(200, { id: "u1" });
+      }
+      throw new Error(`unexpected call: ${url}`);
+    });
+    const u = await ensureUserExists(cfg, "a@example.com", "newpassword1", "山田");
+    expect(u.id).toBe("u1");
+    expect(JSON.parse(puts[0])).toEqual({ password: "newpassword1", user_metadata: { name: "山田" } });
+  });
+});
+
+describe("activatePendingUser", () => {
+  it("仮アカウントなら ban を解いて目印を外す", async () => {
+    const puts: string[] = [];
+    stubFetch((url, init) => {
+      if (url.endsWith("/auth/v1/admin/users/u1") && (init?.method ?? "GET") === "GET") {
+        return jsonRes(200, { id: "u1", app_metadata: { pending_card: true } });
+      }
+      if (url.endsWith("/auth/v1/admin/users/u1") && init?.method === "PUT") {
+        puts.push(String(init.body));
+        return jsonRes(200, { id: "u1" });
+      }
+      throw new Error(`unexpected call: ${url}`);
+    });
+    expect(await activatePendingUser(cfg, "u1")).toBe(true);
+    expect(JSON.parse(puts[0])).toEqual({ ban_duration: "none", app_metadata: { pending_card: false } });
+  });
+
+  it("仮アカウントでなければ触らない（退会者の ban を解かない）", async () => {
+    stubFetch((url, init) => {
+      if ((init?.method ?? "GET") === "GET") return jsonRes(200, { id: "u1", app_metadata: { pending_deletion: true } });
+      throw new Error(`unexpected call: ${init?.method} ${url}`);
+    });
+    expect(await activatePendingUser(cfg, "u1")).toBe(false);
   });
 });

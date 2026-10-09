@@ -14,6 +14,20 @@ import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib
 // 算出は _lib/cancellation_fee に集約し、アカウント削除の事前見積りと共有する。
 import { calculateCancellationFee } from "../../_lib/cancellation_fee";
 import { isPhoneDevicePlan, PHONE_RETURN_ACTION } from "../../_lib/plans";
+import { activatePendingUser } from "../../_lib/supabase";
+
+/**
+ * カード確定で、申込時に作った仮アカウント（ログイン不可）を有効化する。
+ * 失敗は throw して webhook を 500 にし、Stripe の再送で必ずやり直させる。
+ */
+async function activateAccountForSubscription(env: Env, sub: Stripe.Subscription): Promise<void> {
+  const userId = sub.metadata?.supabase_user_id;
+  if (!userId) return;
+  const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
+  if (await activatePendingUser(cfg, userId)) {
+    console.log(`[account] activated pending user=${userId} sub=${sub.id}`);
+  }
+}
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -77,6 +91,7 @@ export async function handleStripeEvent(
           subEvent,
         )
       ) {
+        await activateAccountForSubscription(env, subEvent);
         await provisionSubscription(stripe, env, subEvent, event.id, { emailOnAlready: false });
       }
       break;
@@ -163,6 +178,7 @@ async function onSetupIntentSucceeded(
 
   // 推測で拾った場合はカード更新の可能性があるので、割当済み (already) ではメールを送らない。
   // reason='ok' (本当に新規割当) なら経路によらず送られるので、取りこぼしはしない。
+  await activateAccountForSubscription(env, sub);
   await provisionSubscription(stripe, env, sub, si.id, { emailOnAlready: Boolean(linkedSubId) });
 }
 

@@ -6,6 +6,22 @@ export interface SupabaseAdminConfig {
 export interface AuthUser {
   id: string;
   email: string;
+  app_metadata?: Record<string, unknown>;
+}
+
+/**
+ * カード登録が済むまでの「仮アカウント」の目印（app_metadata.pending_card=true）。
+ *
+ * LP の申込は /api/checkout で契約を作ってからブラウザがカードを確定する順なので、
+ * ユーザーを作る時点ではまだカードが無い。仮アカウントはログイン不可（ban）で作り、
+ * setup_intent.succeeded の Webhook で activatePendingUser が有効化する。
+ * カード入力で離脱した人が再申込したときは、パスワードを上書きして同じ仮アカウントを使う。
+ */
+export const PENDING_CARD_FLAG = "pending_card";
+const PENDING_BAN_DURATION = "876000h"; // 約100年 = 有効化されるまでログイン不可
+
+export function isPendingCardUser(user: AuthUser | null | undefined): boolean {
+  return user?.app_metadata?.[PENDING_CARD_FLAG] === true;
 }
 
 /**
@@ -222,6 +238,8 @@ export async function ensureUserExists(
       password,
       email_confirm: true,
       user_metadata: { name },
+      app_metadata: { [PENDING_CARD_FLAG]: true },
+      ban_duration: PENDING_BAN_DURATION,
     },
   });
 
@@ -239,15 +257,53 @@ export async function ensureUserExists(
     throw new Error(`supabase createUser failed (${created.status}): ${extractErrorMessage(created.body)}`);
   }
 
-  if (!(await verifyPassword(cfg, email, password))) {
-    throw new AccountPasswordMismatchError();
+  if (await verifyPassword(cfg, email, password)) {
+    const existing = await findUserByEmail(cfg, email);
+    if (!existing) {
+      throw new Error(`supabase lookup by email failed after conflict: ${email}`);
+    }
+    return existing;
   }
 
-  const existing = await findUserByEmail(cfg, email);
-  if (!existing) {
-    throw new Error(`supabase lookup by email failed after conflict: ${email}`);
+  // 前回カード入力で離脱した仮アカウントはログイン不可（ban）なので、パスワード検証は必ず落ちる。
+  // 契約もデータも持たないので、今回の入力で上書きして使い回す。
+  const pending = await findUserByEmail(cfg, email);
+  if (!isPendingCardUser(pending)) {
+    throw new AccountPasswordMismatchError();
   }
-  return existing;
+  const updated = await adminFetch<AuthUser>(cfg, `/auth/v1/admin/users/${pending!.id}`, {
+    method: "PUT",
+    json: { password, user_metadata: { name } },
+  });
+  if (updated.status < 200 || updated.status >= 300) {
+    throw new Error(
+      `supabase pending user update failed (${updated.status}): ${extractErrorMessage(updated.body)}`,
+    );
+  }
+  return pending!;
+}
+
+/**
+ * カード登録完了で仮アカウントを有効化する（ban 解除＋目印を外す）。
+ * 仮アカウントでなければ何もしない ── 退会処理（account-delete）の ban を誤って解かないため。
+ * 戻り値: 有効化したら true。
+ */
+export async function activatePendingUser(cfg: SupabaseAdminConfig, userId: string): Promise<boolean> {
+  const got = await adminFetch<AuthUser>(cfg, `/auth/v1/admin/users/${userId}`, { method: "GET" });
+  if (got.status < 200 || got.status >= 300) {
+    throw new Error(`supabase get user failed (${got.status}): ${extractErrorMessage(got.body)}`);
+  }
+  if (!isPendingCardUser(got.body)) return false;
+  const updated = await adminFetch<AuthUser>(cfg, `/auth/v1/admin/users/${userId}`, {
+    method: "PUT",
+    json: { ban_duration: "none", app_metadata: { [PENDING_CARD_FLAG]: false } },
+  });
+  if (updated.status < 200 || updated.status >= 300) {
+    throw new Error(
+      `supabase activate user failed (${updated.status}): ${extractErrorMessage(updated.body)}`,
+    );
+  }
+  return true;
 }
 
 export interface StripeSubscriptionRow {

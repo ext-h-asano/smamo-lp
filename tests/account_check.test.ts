@@ -42,6 +42,15 @@ afterEach(() => {
 });
 
 describe("POST /api/account-check", () => {
+  it("カード未登録の仮アカウントは未登録扱い（認証も試みない）", async () => {
+    const calls = stubFetch(() =>
+      jsonRes(200, { users: [{ id: "u1", email: "a@example.com", app_metadata: { pending_card: true } }] }),
+    );
+    const resp = await onRequestPost(ctx({ email: "a@example.com", password: "password123" }));
+    expect(await resp.json()).toEqual({ exists: false });
+    expect(calls.some((u) => u.includes("grant_type=password"))).toBe(false);
+  });
+
   it("未登録なら exists:false を返し、認証は試みない", async () => {
     const calls = stubFetch(() => jsonRes(200, { users: [] }));
 

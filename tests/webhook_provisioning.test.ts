@@ -39,6 +39,8 @@ interface StubOpts {
   subs?: unknown[];
   /** auto_assign_pool_container RPC が返す reason (既定: ok) */
   rpcReason?: "ok" | "already";
+  /** activatePendingUser の GET が返す pending_card */
+  pendingUser?: boolean;
 }
 
 /** 叩かれた URL を記録しつつ、経路ごとに最小限の応答を返す */
@@ -84,6 +86,14 @@ function stubFetch(opts: StubOpts = {}) {
       }
       // Supabase: users.contract_status の PATCH
       if (url.includes("/rest/v1/users") && method === "PATCH") return jsonRes({});
+      // Supabase Auth: 仮アカウントの有効化 (activatePendingUser)
+      if (url.includes("/auth/v1/admin/users/") && method === "GET") {
+        return jsonRes({ id: "user_1", app_metadata: { pending_card: opts.pendingUser ?? true } });
+      }
+      if (url.includes("/auth/v1/admin/users/") && method === "PUT") {
+        calls.push(`PUT ${url} ${String(init?.body ?? "")}`);
+        return jsonRes({ id: "user_1" });
+      }
       if (url.startsWith(DISCORD_URL)) return jsonRes({});
       if (url.includes("api.resend.com/emails")) return jsonRes({ id: "email_1" });
 
@@ -132,6 +142,20 @@ describe("handleStripeEvent — 割当はカード確定後のみ", () => {
       },
     } as never);
     expect(assigned(calls)).toBe(true);
+    // カード確定で仮アカウントを有効化している
+    expect(calls.some((c) => c.startsWith("PUT ") && c.includes('"ban_duration":"none"'))).toBe(true);
+  });
+
+  it("仮アカウントでないユーザーは有効化の更新をしない", async () => {
+    const calls = stubFetch({ pendingUser: false });
+    const stripe = makeStripe("stripe-key-not-used");
+    await handleStripeEvent(stripe, env, {
+      id: "evt_2b",
+      type: "setup_intent.succeeded",
+      data: { object: { id: "seti_1", customer: "cus_TEST", metadata: { subscription_id: "sub_TEST" } } },
+    } as never);
+    expect(assigned(calls)).toBe(true);
+    expect(calls.some((c) => c.startsWith("PUT "))).toBe(false);
   });
 
   it("customer.subscription.updated は支払い方法の遷移があるときだけ割当する", async () => {

@@ -48,6 +48,7 @@ describe("POST /api/checkout — 登録済みメール", () => {
         if (url.includes("grant_type=password")) {
           return jsonRes(400, { error: "invalid_grant" });
         }
+        if (url.includes("filter=")) return jsonRes(200, { users: [{ id: "u1", email: "a@example.com", app_metadata: {} }] });
         throw new Error(`unexpected call: ${url}`);
       }),
     );

@@ -651,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
         existingAccountConfirmed = Boolean(isExisting);
         if (accountSuccessLabel) {
             accountSuccessLabel.textContent =
-                existingAccountConfirmed ? '既存アカウントに追加します' : 'アカウント作成完了';
+                existingAccountConfirmed ? '既存アカウントに追加します' : 'アカウント情報の入力完了';
         }
         // 既存アカウントには紹介の紐付けも初期費用免除も効かないので欄ごと隠す
         // （URL 由来の add_device モードでは元から隠しているので触らない）。

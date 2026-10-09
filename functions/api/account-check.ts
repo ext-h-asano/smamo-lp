@@ -1,5 +1,5 @@
 import { Env, jsonResponse } from "../_lib/stripe";
-import { findUserByEmail, verifyPassword } from "../_lib/supabase";
+import { findUserByEmail, isPendingCardUser, verifyPassword } from "../_lib/supabase";
 
 interface AccountCheckRequest {
   email?: string;
@@ -36,7 +36,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
   try {
     const existing = await findUserByEmail(cfg, email);
-    if (!existing) return jsonResponse({ exists: false });
+    // カード未登録の仮アカウントは「未登録」扱い（checkout が上書きして使い回す）
+    if (!existing || isPendingCardUser(existing)) return jsonResponse({ exists: false });
     const authenticated = await verifyPassword(cfg, email, password);
     return jsonResponse({ exists: true, authenticated });
   } catch (err) {
