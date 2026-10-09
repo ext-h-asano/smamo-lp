@@ -656,10 +656,11 @@
                         </div>
                         <div class="thankyou-summary-card__body">
                             <ul class="thankyou-summary-list">
-                                <li><span>プラン</span><strong>月額プラン</strong></li>
+                                <li><span>プラン</span><strong id="tyPlan">月額プラン</strong></li>
                                 <li><span>SMS受信番号</span><strong>あり</strong></li>
-                                <li><span>月額料金</span><strong>¥3,828 /台（税込）</strong></li>
-                                <li><span>初期費用</span><strong>¥33,000（税込）</strong></li>
+                                <li><span id="tyFeeLabel">月額料金</span><strong id="tyFee">¥3,828 /台（税込）</strong></li>
+                                <li id="tyCallRow" hidden><span>通話</span><strong>ご利用いただけません</strong></li>
+                                <li><span>初期費用</span><strong id="tyInitFee">¥33,000（税込）</strong></li>
                                 <li><span>お支払い方法</span><strong>クレジットカード</strong></li>
                                 <li>
                                     <span>無料体験期間</span>
@@ -671,7 +672,7 @@
                             <div class="thankyou-summary-divider">
                                 <div class="thankyou-summary-total">
                                     <span>初回お支払い額</span>
-                                    <strong>¥36,828 <small>（税込）</small></strong>
+                                    <strong><span id="tyTotal">¥36,828</span> <small id="tyTotalNote">（税込）</small></strong>
                                 </div>
                                 <div class="thankyou-order-box">
                                     <span>注文番号</span>
@@ -764,6 +765,30 @@
             </div>
         </footer>
     </main>
+    <script>
+        // 申込時のプランで「ご注文内容」を差し替える（script.js が return_url に ?plan= を付ける）。
+        // 未指定・不明なプランは従来どおり月額プランの表示のまま。
+        (function () {
+            var PLANS = {
+                monthly: { name: '月額プラン', feeLabel: '月額料金', fee: '¥3,828 /台（税込）', init: '¥33,000（税込）', total: '¥36,828', note: '（税込）' },
+                yearly: { name: '年払いプラン', feeLabel: '年額料金', fee: '¥38,280 /台（税込）', init: '¥33,000（税込）', total: '¥71,280', note: '（税込）' },
+                two_year: { name: '2年契約プラン', feeLabel: '月額料金', fee: '¥6,028 /台（税込）', init: '¥0', total: '¥18,084', note: '（税込・3ヶ月分）' },
+                lite: { name: 'ライトプラン（通話なし）', feeLabel: '月額料金', fee: '¥2,480 /台（税込）', init: '¥33,000（税込）', total: '¥35,480', note: '（税込）', noCall: true }
+            };
+            var key = new URLSearchParams(window.location.search).get('plan');
+            var p = key && Object.prototype.hasOwnProperty.call(PLANS, key) ? PLANS[key] : null;
+            if (!p) return;
+            var set = function (id, text) { var el = document.getElementById(id); if (el) el.textContent = text; };
+            set('tyPlan', p.name);
+            set('tyFeeLabel', p.feeLabel);
+            set('tyFee', p.fee);
+            set('tyInitFee', p.init);
+            set('tyTotal', p.total);
+            set('tyTotalNote', p.note);
+            var callRow = document.getElementById('tyCallRow');
+            if (callRow) callRow.hidden = !p.noCall;
+        })();
+    </script>
 </body>
 
 </html>

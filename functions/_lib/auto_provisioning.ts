@@ -4,6 +4,7 @@ import { sendDiscord } from "./discord";
 import { adminFetch } from "./supabase";
 import { syncSubscription } from "./subscription_sync";
 import { sendProvisioningEmail } from "./provisioning_email";
+import { isPhoneDevicePlan, PHONE_RETURN_ACTION } from "./plans";
 
 export type AutoAssignReason = "ok" | "already" | "not_found" | "exhausted";
 
@@ -156,7 +157,12 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
           { name: "subscription_id", value: subscriptionId },
           { name: "email", value: customerEmail ?? "(unknown)" },
           { name: "plan_key", value: planKey ?? "(unknown)" },
-          { name: "action", value: "`/fill-container` で補充すれば自動で割当されます" },
+          {
+            name: "action",
+            value: isPhoneDevicePlan(planKey)
+              ? `実機（ライト）の空きなし。${PHONE_RETURN_ACTION}`
+              : "`/fill-container` で補充すれば自動で割当されます",
+          },
         ],
       });
       return "exhausted";
@@ -184,9 +190,15 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
       const thresholdRaw = env.POOL_WARN_THRESHOLD ?? "3";
       const threshold = Number.isFinite(Number(thresholdRaw)) ? Number(thresholdRaw) : 3;
       if (remaining >= 0 && remaining <= threshold) {
+        const phone = isPhoneDevicePlan(planKey);
         await sendDiscord(env, "warn", {
-          title: `⚠️ プール残量 ${remaining} 台 (閾値 ${threshold})`,
-          fields: [{ name: "action", value: "`/fill-container` で補充推奨" }],
+          title: `⚠️ ${phone ? "実機（ライト）" : "プール"}残量 ${remaining} 台 (閾値 ${threshold})`,
+          fields: [
+            {
+              name: "action",
+              value: phone ? `返却機があれば初期化して戻す。${PHONE_RETURN_ACTION}` : "`/fill-container` で補充推奨",
+            },
+          ],
         });
       }
       return "ok";

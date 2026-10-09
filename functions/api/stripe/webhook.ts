@@ -13,6 +13,7 @@ import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib
 // 料金改定(旧¥5,478/新¥6,028)をまたいでも各契約者の実価格で請求するため、
 // 算出は _lib/cancellation_fee に集約し、アカウント削除の事前見積りと共有する。
 import { calculateCancellationFee } from "../../_lib/cancellation_fee";
+import { isPhoneDevicePlan, PHONE_RETURN_ACTION } from "../../_lib/plans";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sig = request.headers.get("stripe-signature");
@@ -223,4 +224,17 @@ async function onSubscriptionDeleted(
   }
 
   await syncSubscription(stripe, env, subscription.id, { cancellationFee });
+
+  // 実機（ライト）は docker rm で作り直せない。canceled の同期と同じトランザクションで DB トリガーが
+  // 紐付けを外し status='phone_returned' に隔離しているので、人が初期化してプールへ戻す必要がある。
+  if (isPhoneDevicePlan(subscription.metadata?.plan_key)) {
+    await sendDiscord(env, "warn", {
+      title: "📱 実機が返却されました（要初期化）",
+      fields: [
+        { name: "subscription_id", value: subscription.id },
+        { name: "plan_key", value: String(subscription.metadata?.plan_key) },
+        { name: "action", value: PHONE_RETURN_ACTION },
+      ],
+    });
+  }
 }

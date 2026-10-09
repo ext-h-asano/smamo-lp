@@ -407,11 +407,15 @@ document.addEventListener('DOMContentLoaded', () => {
         monthly: { title: 'スマモ 月額プラン', price: 3828, unit: '/月', hasInitFee: true, renewLabel: '/月（自動更新）' },
         yearly: { title: 'スマモ 年払いプラン', price: 38280, unit: '/年', hasInitFee: true, renewLabel: '/年（自動更新）' },
         two_year: { title: 'スマモ 2年契約プラン', price: 6028, unit: '/月', hasInitFee: false, renewLabel: '/月（2年契約・自動更新）' },
+        // 通話なし（実機）。2026-10 時点では非公開ページ /lite からのみ選べる。
+        lite: { title: 'スマモ ライトプラン（通話なし）', price: 2480, unit: '/月', hasInitFee: true, renewLabel: '/月（自動更新）' },
     };
     const INITIAL_FEE_TAX_INCL = 33000;
     const SMS_PRICE_TAX_INCL = 550;
 
-    let selectedPlan = 'monthly';
+    // ページ側で既定プランを指定できる（/lite は <body data-default-plan="lite">）。
+    const pageDefaultPlan = document.body?.dataset.defaultPlan;
+    let selectedPlan = pageDefaultPlan && PLANS[pageDefaultPlan] ? pageDefaultPlan : 'monthly';
     // 初期費用が無料になるのは INITIAL_FEE_WAIVER_CODES に載った招待コードだけ。
     // 2026-07-31 時点では secret 未設定＝免除ゼロ（誰も無料にならない）。
     // 欄が空でないことではなく /api/validate-ref の判定結果で表示を切り替える。
@@ -907,7 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     elements,
                     clientSecret: data.client_secret,
                     confirmParams: {
-                        return_url: window.location.origin + '/thankyou',
+                        return_url: window.location.origin + '/thankyou?plan=' + encodeURIComponent(selectedPlan),
                         payment_method_data: {
                             billing_details: { name, email },
                         },

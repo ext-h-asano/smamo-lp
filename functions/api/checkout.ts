@@ -28,7 +28,7 @@ interface CheckoutRequest {
 }
 
 function isPlanKey(v: unknown): v is PlanKey {
-  return v === "monthly" || v === "yearly" || v === "two_year";
+  return v === "monthly" || v === "yearly" || v === "two_year" || v === "lite";
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -40,6 +40,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   if (!isPlanKey(body.plan)) return jsonResponse({ error: "invalid plan" }, 400);
+  // price 未設定のプラン（STRIPE_PRICE_LITE を入れていない環境のライト等）は、
+  // ユーザーや Stripe の残骸を作る前にここで断る。
+  if (!getPlans(env)[body.plan].priceId) {
+    return jsonResponse({ error: "このプランは現在お申し込みいただけません。", code: "plan_unavailable" }, 400);
+  }
   if (!body.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
     return jsonResponse({ error: "invalid email" }, 400);
   }

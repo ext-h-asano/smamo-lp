@@ -14,6 +14,8 @@ export interface Env {
   STRIPE_PRICE_MONTHLY: string;
   STRIPE_PRICE_YEARLY: string;
   STRIPE_PRICE_TWO_YEAR: string;
+  /** スマモ ライト（通話なし・¥2,480/月）の price。未設定ならライトの申込を受け付けない */
+  STRIPE_PRICE_LITE?: string;
   STRIPE_PRICE_SMS_OPTION: string;
   STRIPE_PRODUCT_INITIAL_FEE: string;
   SUPABASE_URL: string;
