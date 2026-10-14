@@ -1,6 +1,7 @@
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { adminFetch, getUserFromJwt, SupabaseAdminConfig } from "../_lib/supabase";
 import { calculateCancellationFee } from "../_lib/cancellation_fee";
+import { isAppleSubscriptionId } from "../_lib/provider";
 
 /**
  * アプリ内アカウント削除 (App Store Review Guideline 5.1.1(v))。
@@ -19,6 +20,10 @@ import { calculateCancellationFee } from "../_lib/cancellation_fee";
  * 1 より先に 2 を実行すると「課金は続いているのにログインできない」状態を作る。
  * ここで auth.users を直接消してはいけない: stripe_subscriptions が CASCADE で消え、
  * containers.user_id も SET NULL になり、コンテナが解放されずに取り残される。
+ *
+ * App Store の契約（stripe_subscription_id = 'apple:...'）はサーバーから解約できない。
+ * Stripe には渡さずに削除は進め、有効な契約があれば応答に appleSubscriptionActive: true を付ける。
+ * アプリはそれを見て「設定アプリから解約してください」と案内する。
  */
 
 /** 解約対象とみなす Stripe subscription status。 */
@@ -91,7 +96,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     console.error(`[account-delete] subscription list failed user=${user.id}:`, e);
     return jsonResponse({ error: "failed to load subscriptions" }, 500);
   }
-  const live = rows.filter((r) => LIVE_STATUSES.has(r.status));
+  const liveAll = rows.filter((r) => LIVE_STATUSES.has(r.status));
+  const live = liveAll.filter((r) => !isAppleSubscriptionId(r.stripe_subscription_id));
+  const appleSubscriptionActive = liveAll.length !== live.length;
+  const appleFlag = appleSubscriptionActive ? { appleSubscriptionActive: true } : {};
 
   // 手数料は Stripe の実データ (items の単価 + metadata.committed_until) から出す。
   // Webhook の実請求と同じ _lib/cancellation_fee を通すので金額は必ず一致する。
@@ -129,6 +137,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       email: user.email,
       subscriptions: summaries,
       total_cancellation_fee: totalFee,
+      ...appleFlag,
     });
   }
 
@@ -176,5 +185,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     deleted: true,
     cancelled_subscriptions: summaries.length,
     total_cancellation_fee: totalFee,
+    ...appleFlag,
   });
 };

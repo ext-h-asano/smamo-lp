@@ -16,6 +16,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const stripe = makeStripe(env.STRIPE_SECRET_KEY);
 
+  // 対象は Stripe から列挙する契約だけ。App Store の契約（'apple:...'）は DB にしか無いので
+  // ここには来ない（リマインダーは App Store が送る）。
   const candidates: Stripe.Subscription[] = [];
   for await (const sub of stripe.subscriptions.list({ status: "trialing", limit: 100 })) {
     candidates.push(sub);

@@ -5,6 +5,7 @@
 import type Stripe from "stripe";
 import type { Env } from "./stripe";
 import { StripeSubscriptionRow, recomputeContractStatus, upsertSubscription } from "./supabase";
+import { isAppleSubscriptionId } from "./provider";
 
 export async function syncSubscription(
   stripe: Stripe,
@@ -12,6 +13,11 @@ export async function syncSubscription(
   subscriptionId: string,
   extras: { cancellationFee?: number | null } = {},
 ): Promise<void> {
+  // App Store の契約は Stripe に存在しない。同期は /api/apple/* が行う。
+  if (isAppleSubscriptionId(subscriptionId)) {
+    console.warn(`[stripe] skip sync for App Store subscription ${subscriptionId}`);
+    return;
+  }
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
   const userId = sub.metadata?.supabase_user_id;
   if (!userId) {

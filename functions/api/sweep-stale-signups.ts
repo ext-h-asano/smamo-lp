@@ -23,6 +23,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const stripe = makeStripe(env.STRIPE_SECRET_KEY);
 
+  // 対象は Stripe から列挙する契約だけ。App Store の契約（'apple:...'）は DB にしか無いので触らない。
   const candidates: Stripe.Subscription[] = [];
   const seen = new Set<string>();
   for (const status of SCAN_STATUSES) {

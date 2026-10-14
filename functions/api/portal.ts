@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getCustomerIdForUser, getUserFromJwt } from "../_lib/supabase";
+import { isAppleSubscriptionId } from "../_lib/provider";
 
 interface PortalRequest {
   return_url?: string;
@@ -11,6 +12,7 @@ interface PortalRequest {
 }
 
 const DEFAULT_RETURN_URL = "https://smamo.jp/";
+const APPLE_MANAGE_URL = "https://apps.apple.com/account/subscriptions";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const auth = request.headers.get("authorization") ?? "";
@@ -21,11 +23,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const user = await getUserFromJwt(cfg, m[1]);
   if (!user) return jsonResponse({ error: "invalid or expired token" }, 401);
 
-  const customerId = await getCustomerIdForUser(cfg, user.id);
-  if (!customerId) {
-    return jsonResponse({ error: "no Stripe customer found for this user" }, 404);
-  }
-
   let body: PortalRequest = {};
   try {
     if (request.headers.get("content-type")?.includes("application/json")) {
@@ -33,6 +30,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   } catch {
     // empty body is fine
+  }
+
+  // App Store の契約は Stripe のポータルでは管理できない（iPhone の設定 → サブスクリプション）
+  if (isAppleSubscriptionId(body.subscription_id)) {
+    return jsonResponse({ error: "apple_subscription", manage_url: APPLE_MANAGE_URL }, 400);
+  }
+
+  // App Store の契約しか無いユーザーは Stripe の顧客を持たない → 404
+  const customerId = await getCustomerIdForUser(cfg, user.id);
+  if (!customerId) {
+    return jsonResponse({ error: "no Stripe customer found for this user" }, 404);
   }
 
   const stripe = makeStripe(env.STRIPE_SECRET_KEY);

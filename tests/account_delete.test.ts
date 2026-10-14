@@ -237,3 +237,40 @@ describe("POST /api/account-delete — 実行 (confirm: true)", () => {
     expect(banCalls(calls)).toHaveLength(1);
   });
 });
+
+describe("POST /api/account-delete — App Store の契約", () => {
+  const appleRow = subRow({ stripe_subscription_id: "apple:2000000111", stripe_customer_id: "apple", status: "trialing" });
+
+  it("見積りでは Stripe に問い合わせず appleSubscriptionActive: true を返す", async () => {
+    const calls = stubFetch({ rows: [appleRow, subRow()] });
+    const res = await onRequestPost(ctx({}, "Bearer good"));
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(json.appleSubscriptionActive).toBe(true);
+    expect((json.subscriptions as unknown[]).length).toBe(1);
+    expect(calls.some((c) => c.url.includes("apple:"))).toBe(false);
+  });
+
+  it("実行では Stripe の契約だけ解約し、削除は進めて appleSubscriptionActive: true を返す", async () => {
+    const calls = stubFetch({ rows: [appleRow, subRow()] });
+    const res = await onRequestPost(ctx({ confirm: true }, "Bearer good"));
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ deleted: true, cancelled_subscriptions: 1, appleSubscriptionActive: true });
+    expect(cancelCalls(calls).map((c) => c.url)).toEqual([expect.stringContaining("/v1/subscriptions/sub_monthly")]);
+    expect(banCalls(calls)).toHaveLength(1);
+  });
+
+  it("App Store の契約だけでも削除でき、Stripe を一切呼ばない", async () => {
+    const calls = stubFetch({ rows: [appleRow] });
+    const res = await onRequestPost(ctx({ confirm: true }, "Bearer good"));
+    expect(await res.json()).toMatchObject({ deleted: true, cancelled_subscriptions: 0, appleSubscriptionActive: true });
+    expect(calls.some((c) => c.url.includes("api.stripe.com"))).toBe(false);
+  });
+
+  it("失効済みの App Store の契約なら appleSubscriptionActive を付けない", async () => {
+    stubFetch({ rows: [{ ...appleRow, status: "canceled" }] });
+    const json = (await (await onRequestPost(ctx({ confirm: true }, "Bearer good"))).json()) as Record<string, unknown>;
+    expect(json.appleSubscriptionActive).toBeUndefined();
+  });
+});

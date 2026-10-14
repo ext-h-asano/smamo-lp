@@ -2,6 +2,7 @@ import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { adminFetch } from "../_lib/supabase";
 import { sendDiscord } from "../_lib/discord";
 import { sendWelcomeForSub } from "../_lib/provisioning_email";
+import { isAppleSubscriptionId } from "../_lib/provider";
 
 const MAX_PER_RUN = 50;
 const ASSIGN_TRIAL_DAYS = 3;
@@ -43,6 +44,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
     // reason === "ok": assign trial and notify
     const subId = row.subscription_id!;
+
+    // App Store の契約は課金をこちらで止めていない（trial_end 凍結なし）ので、戻す処理も無い。
+    if (isAppleSubscriptionId(subId)) {
+      await sendDiscord(env, "info", {
+        title: "✅ 順番待ち解消・割当完了（App Store 契約）",
+        fields: [
+          { name: "subscription_id", value: subId, inline: true },
+          { name: "container_name", value: row.container_name ?? "(unknown)", inline: true },
+          { name: "remaining_pool", value: String(row.remaining_pool ?? -1), inline: true },
+        ],
+      });
+      assigned++;
+      continue;
+    }
     try {
       const trialEnd = Math.floor(Date.now() / 1000) + ASSIGN_TRIAL_DAYS * 86400;
       const sub = await stripe.subscriptions.update(subId, {

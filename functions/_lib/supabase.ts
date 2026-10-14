@@ -1,3 +1,5 @@
+import { APPLE_CUSTOMER_ID } from "./provider";
+
 export interface SupabaseAdminConfig {
   url: string;
   serviceRoleKey: string;
@@ -45,6 +47,7 @@ export async function getUserFromJwt(
 
 /**
  * Look up the most recent stripe_customer_id stored for this user.
+ * App Store の契約の行（stripe_customer_id = 'apple'）は Stripe の顧客ではないので除く。
  */
 export async function getCustomerIdForUser(
   cfg: SupabaseAdminConfig,
@@ -52,6 +55,7 @@ export async function getCustomerIdForUser(
 ): Promise<string | null> {
   const path =
     `/rest/v1/stripe_subscriptions?user_id=eq.${userId}` +
+    `&stripe_customer_id=neq.${APPLE_CUSTOMER_ID}` +
     `&select=stripe_customer_id&order=created_at.desc&limit=1`;
   const resp = await fetch(`${cfg.url.replace(/\/$/, "")}${path}`, {
     headers: {

@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { Env, jsonResponse, makeStripe } from "../_lib/stripe";
 import { getCustomerIdForUser, getUserFromJwt } from "../_lib/supabase";
+import { isAppleSubscriptionId } from "../_lib/provider";
 
 interface ToggleSmsRequest {
   subscription_id: string;
@@ -25,6 +26,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (!body.subscription_id || typeof body.enable !== "boolean") {
     return jsonResponse({ error: "subscription_id and enable are required" }, 400);
+  }
+  // App Store の契約に Stripe の SMS オプションは付けられない
+  if (isAppleSubscriptionId(body.subscription_id)) {
+    return jsonResponse({ error: "apple_subscription" }, 400);
   }
 
   const customerId = await getCustomerIdForUser(cfg, user.id);
