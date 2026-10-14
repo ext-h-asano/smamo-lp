@@ -38,6 +38,10 @@ export interface Env {
   WAITLIST_FREEZE_DAYS?: string;
   /** ドレインエンドポイントの認証シークレット */
   DRAIN_SECRET: string;
+  /** iOS アプリ内課金: アプリの bundle ID。未設定なら "cx.ext.smamo"（docs/ios_iap_design.md） */
+  APPLE_BUNDLE_ID?: string;
+  /** iOS アプリ内課金: 月額サブスクの product ID。未設定なら "cx.ext.smamo.monthly" */
+  APPLE_PRODUCT_ID?: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {

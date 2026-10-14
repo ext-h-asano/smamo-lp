@@ -5,6 +5,7 @@ import { adminFetch } from "./supabase";
 import { syncSubscription } from "./subscription_sync";
 import { sendProvisioningEmail } from "./provisioning_email";
 import { isPhoneDevicePlan, PHONE_RETURN_ACTION } from "./plans";
+import { isAppleSubscriptionId } from "./provider";
 
 export type AutoAssignReason = "ok" | "already" | "not_found" | "exhausted";
 
@@ -16,9 +17,16 @@ interface AutoAssignResult {
   user_id_assigned: string | null;
 }
 
+export interface AutoAssignOutcome {
+  reason: AutoAssignReason;
+  /** ok / already のときの割当先 */
+  containerName: string | null;
+}
+
 interface AutoAssignArgs {
   env: Env;
-  stripe: Stripe;            // trial_end 凍結に使う
+  // trial_end 凍結に使う。App Store の契約（'apple:...'）では使わないので null でよい。
+  stripe: Stripe | null;
   subscriptionId: string;
   customerEmail?: string | null;
   planKey?: string | null;
@@ -35,11 +43,21 @@ interface AutoAssignArgs {
  * - reason='already'    → No-op (通知なし、log のみ)
  * - reason='not_found'  → log のみ (呼出元 provisionSubscription が同期して再試行するので通知不要)
  * - reason='exhausted'  → trial_end 凍結 + mark_waitlisted + warn 通知（mark 失敗時は critical）
+ *                          App Store の契約は課金をこちらで止められないので凍結しない（mark_waitlisted と通知のみ）
  * - RPC エラー          → critical
  *
  * never throw: Stripe webhook の 200 返却を妨げない。
  */
 export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAssignReason> {
+  return (await autoAssignContainerDetailed(args)).reason;
+}
+
+/** autoAssignContainer と同じだが、割当先のコンテナ名も返す。 */
+export async function autoAssignContainerDetailed(args: AutoAssignArgs): Promise<AutoAssignOutcome> {
+  const reason = (r: AutoAssignReason, containerName: string | null = null): AutoAssignOutcome => ({
+    reason: r,
+    containerName,
+  });
   const { env, subscriptionId, customerEmail, planKey, deviceName, triggerId } = args;
 
   const cfg = { url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SECRET_KEY };
@@ -62,7 +80,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
         { name: "action", value: "手動 /assign-user で復旧してください" },
       ],
     });
-    return "not_found";
+    return reason("not_found");
   }
 
   if (rpcResp.status < 200 || rpcResp.status >= 300) {
@@ -80,7 +98,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
         { name: "action", value: "手動 /assign-user で復旧してください" },
       ],
     });
-    return "not_found";
+    return reason("not_found");
   }
 
   const rows = (Array.isArray(rpcResp.body) ? rpcResp.body : []) as AutoAssignResult[];
@@ -98,7 +116,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
         { name: "action", value: "DB 側 function 定義を確認してください" },
       ],
     });
-    return "not_found";
+    return reason("not_found");
   }
 
   switch (data.reason) {
@@ -108,18 +126,22 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
       console.log(
         `[auto-provision] sub not in DB yet (will self-heal via syncSubscription): sub=${subscriptionId} trigger=${triggerId}`,
       );
-      return "not_found";
+      return reason("not_found");
 
     case "exhausted": {
-      // 課金時計を凍結（trial_end を遠い未来へ）。
+      // 課金時計を凍結（trial_end を遠い未来へ）。App Store の契約はサーバーから止められないので凍結しない。
+      const apple = isAppleSubscriptionId(subscriptionId);
       const freezeDays = Number(env.WAITLIST_FREEZE_DAYS ?? "365");
       const days = Number.isFinite(freezeDays) && freezeDays > 0 ? freezeDays : 365;
       const frozenTrialEnd = Math.floor(Date.now() / 1000) + days * 86400;
       try {
-        await args.stripe.subscriptions.update(subscriptionId, {
-          trial_end: frozenTrialEnd,
-          proration_behavior: "none",
-        });
+        if (!apple) {
+          if (!args.stripe) throw new Error("stripe client is required to freeze trial_end");
+          await args.stripe.subscriptions.update(subscriptionId, {
+            trial_end: frozenTrialEnd,
+            proration_behavior: "none",
+          });
+        }
       } catch (e) {
         console.error(`[waitlist] trial_end 凍結失敗 sub=${subscriptionId}: ${e}`);
         await sendDiscord(env, "critical", {
@@ -130,7 +152,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
             { name: "action", value: "手動で trial_end を延長 / コンテナ手動割当" },
           ],
         });
-        return "exhausted";
+        return reason("exhausted");
       }
 
       // DB に待ち登録（FIFO キー）
@@ -152,9 +174,12 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
       }
 
       await sendDiscord(env, "warn", {
-        title: "🕒 順番待ち登録（プール枯渇）",
+        title: apple ? "🕒 順番待ち登録（プール枯渇・App Store 契約）" : "🕒 順番待ち登録（プール枯渇）",
         fields: [
           { name: "subscription_id", value: subscriptionId },
+          ...(apple
+            ? [{ name: "⚠️ 課金", value: "App Store の契約は課金を止められない（trial_end 凍結なし）。早急に割当すること" }]
+            : []),
           { name: "email", value: customerEmail ?? "(unknown)" },
           { name: "plan_key", value: planKey ?? "(unknown)" },
           {
@@ -165,14 +190,14 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
           },
         ],
       });
-      return "exhausted";
+      return reason("exhausted");
     }
 
     case "already":
       console.log(
         `[auto-provision] already_assigned: sub=${subscriptionId} container=${data.container_name}`,
       );
-      return "already";
+      return reason("already", data.container_name);
 
     case "ok": {
       const remaining = data.remaining_pool ?? -1;
@@ -201,7 +226,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
           ],
         });
       }
-      return "ok";
+      return reason("ok", data.container_name);
     }
 
     default: {
@@ -216,7 +241,7 @@ export async function autoAssignContainer(args: AutoAssignArgs): Promise<AutoAss
           { name: "action", value: "DB function 定義を確認してください" },
         ],
       });
-      return "not_found";
+      return reason("not_found");
     }
   }
 }
