@@ -2,7 +2,9 @@
  * テスト用に Apple と同じ形の証明書チェーン（root P-384 / intermediate P-384 / leaf P-256）を
  * WebCrypto で生成し、App Store 形式の JWS に署名する。本物の Apple 鍵は一切使わない。
  */
-import { OID_APPLE_INTERMEDIATE, OID_APPLE_LEAF } from "../../functions/_lib/apple_jws";
+// apple_jws から import しない: エンドポイントのテストは apple_jws を vi.mock し、その中でこのファイルを読むため循環する。
+const OID_APPLE_LEAF = "1.2.840.113635.100.6.11.1";
+const OID_APPLE_INTERMEDIATE = "1.2.840.113635.100.6.2.1";
 
 // ---------------- DER エンコーダ ----------------
 function len(n: number): number[] {
