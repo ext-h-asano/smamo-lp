@@ -1,0 +1,117 @@
+.thanks-page {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    background: #f4f7fc;
+    color: #1a1a1a;
+}
+.thanks-header {
+    padding: 28px 24px;
+    background: #fff;
+}
+.thanks-header img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+.thanks-main {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: 64px 24px;
+}
+.thanks-panel {
+    width: 100%;
+    max-width: 760px;
+    padding: 56px 48px;
+    border-radius: 20px;
+    background: #fff;
+    text-align: center;
+}
+.thanks-icon {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    border-radius: 50%;
+    background: #eaf4ff;
+    color: #2f8cff;
+    font-size: 30px;
+}
+.thanks-panel h1 {
+    font-size: 32px;
+    line-height: 1.4;
+}
+.thanks-lead {
+    margin-top: 24px;
+    font-size: 18px;
+    line-height: 1.9;
+}
+.thanks-notice {
+    margin: 32px 0;
+    padding: 20px 24px;
+    border-radius: 8px;
+    background: #f4f7fc;
+    text-align: left;
+}
+.thanks-notice h2 {
+    margin-bottom: 8px;
+    font-size: 16px;
+    line-height: 1.4;
+}
+.thanks-notice p {
+    font-size: 14px;
+    line-height: 1.8;
+}
+.thanks-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    max-width: 280px;
+    min-height: 64px;
+    margin: 0 auto;
+    padding: 16px;
+    border-radius: 999px;
+    background: #111;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+}
+.thanks-button:hover {
+    background: #333;
+}
+.thanks-footer {
+    padding: 20px;
+    color: #666;
+    text-align: center;
+}
+@media (max-width: 767px) {
+    .thanks-header {
+        padding: 20px;
+    }
+    .thanks-header img {
+        width: 154px;
+    }
+    .thanks-main {
+        padding: 32px 20px;
+    }
+    .thanks-panel {
+        padding: 32px 20px;
+        border-radius: 12px;
+    }
+    .thanks-panel h1 {
+        font-size: 26px;
+    }
+    .thanks-lead {
+        font-size: 15px;
+    }
+    .thanks-notice {
+        padding: 16px;
+    }
+    .thanks-button {
+        font-size: 16px;
+    }
+}
