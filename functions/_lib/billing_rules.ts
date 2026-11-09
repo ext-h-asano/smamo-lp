@@ -7,6 +7,7 @@ export interface TrialReminderCandidate {
   id: string;
   trial_end: number | null;
   cancel_at_period_end: boolean;
+  cancel_at?: number | null;
 }
 
 /**
@@ -23,26 +24,60 @@ export function selectTrialReminderTargets<T extends TrialReminderCandidate>(
       typeof s.trial_end === "number" &&
       s.trial_end > nowSec &&
       s.trial_end <= windowEnd &&
-      !s.cancel_at_period_end,
+      !isCancelScheduled(s),
   );
 }
 
 /**
- * customer.subscription.updated が「解約予約が入った瞬間」(cancel_at_period_end: false→true)
- * かどうかを判定。previous_attributes に当該フィールドが無ければ false。
+ * 解約予約が入っているか。Stripe のポータルは cancel_at_period_end ではなく
+ * cancel_at（終了日時）だけを入れて解約予約することがある（2026-10-28 実測）ので両方を見る。
+ */
+export function isCancelScheduled(sub: {
+  cancel_at_period_end: boolean;
+  cancel_at?: number | null;
+}): boolean {
+  return sub.cancel_at_period_end === true || typeof sub.cancel_at === "number";
+}
+
+/**
+ * customer.subscription.updated が「解約予約が入った瞬間」かどうかを判定。
+ * cancel_at_period_end: false→true か cancel_at: null→日時 のどちらか。
+ * previous_attributes に当該フィールドが無ければ false。
  */
 export function isCancelRequested(
   eventType: string,
   previousAttributes: Record<string, unknown> | undefined,
-  sub: { cancel_at_period_end: boolean },
+  sub: { cancel_at_period_end: boolean; cancel_at?: number | null },
 ): boolean {
-  return (
-    eventType === "customer.subscription.updated" &&
-    !!previousAttributes &&
+  if (eventType !== "customer.subscription.updated" || !previousAttributes) return false;
+  const periodEndRequested =
     "cancel_at_period_end" in previousAttributes &&
     previousAttributes["cancel_at_period_end"] === false &&
-    sub.cancel_at_period_end === true
-  );
+    sub.cancel_at_period_end === true;
+  const cancelAtRequested =
+    "cancel_at" in previousAttributes &&
+    previousAttributes["cancel_at"] == null &&
+    typeof sub.cancel_at === "number";
+  return periodEndRequested || cancelAtRequested;
+}
+
+/**
+ * customer.subscription.updated が「解約予約が取り消された瞬間」かどうかを判定。
+ * 変更前は予約あり（cancel_at_period_end=true か cancel_at が日時）で、今は予約なし。
+ */
+export function isCancelUndone(
+  eventType: string,
+  previousAttributes: Record<string, unknown> | undefined,
+  sub: { cancel_at_period_end: boolean; cancel_at?: number | null },
+): boolean {
+  if (eventType !== "customer.subscription.updated" || !previousAttributes) return false;
+  if (!("cancel_at_period_end" in previousAttributes) && !("cancel_at" in previousAttributes)) {
+    return false;
+  }
+  const wasScheduled =
+    previousAttributes["cancel_at_period_end"] === true ||
+    typeof previousAttributes["cancel_at"] === "number";
+  return wasScheduled && !isCancelScheduled(sub);
 }
 
 /** invoice から subscription id を取り出す (新旧 API 形状両対応)。webhook.ts から移設 */
