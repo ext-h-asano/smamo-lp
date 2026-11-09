@@ -7,7 +7,12 @@ import {
   matchSubscriptionForSetupIntent,
   shouldProvisionOnSubscriptionUpdate,
 } from "../../_lib/provisioning_rules";
-import { extractSubscriptionId, isCancelRequested } from "../../_lib/billing_rules";
+import { extractSubscriptionId, isCancelRequested, isCancelUndone } from "../../_lib/billing_rules";
+import {
+  removeInitialFeeOnTrialCancel,
+  restoreInitialFeeOnCancelUndone,
+  type InitialFeeStripe,
+} from "../../_lib/initial_fee";
 import { sendCancelConfirmForSub, sendPaymentFailedForInvoice } from "../../_lib/billing_email";
 // 2年契約の中途解約手数料は「契約中サブスクの実際の月額 × 残月数」。
 // 料金改定(旧¥5,478/新¥6,028)をまたいでも各契約者の実価格で請求するため、
@@ -68,7 +73,7 @@ export async function handleStripeEvent(
     case "customer.subscription.updated": {
       const subEvent = event.data.object as Stripe.Subscription;
       await syncSubscription(stripe, env, subEvent.id);
-      // ③ 解約予約が入った瞬間 (cancel_at_period_end: false→true) に確認メール
+      // ③ 解約予約が入った瞬間 (cancel_at_period_end: false→true または cancel_at: null→日時) に確認メール
       if (
         isCancelRequested(
           event.type,
@@ -76,10 +81,29 @@ export async function handleStripeEvent(
           subEvent,
         )
       ) {
+        // お試し中の解約なら初期費用の明細を先に消す（残すと契約終了時にこれだけ請求される）
+        try {
+          await removeInitialFeeOnTrialCancel(stripe as unknown as InitialFeeStripe, subEvent);
+        } catch (e) {
+          console.error(`[initial_fee] remove error sub=${subEvent.id}: ${e}`);
+        }
         try {
           await sendCancelConfirmForSub(stripe, env, subEvent);
         } catch (e) {
           console.error(`[email] cancel-confirm error sub=${subEvent.id}: ${e}`);
+        }
+      }
+      if (
+        isCancelUndone(
+          event.type,
+          event.data.previous_attributes as Record<string, unknown> | undefined,
+          subEvent,
+        )
+      ) {
+        try {
+          await restoreInitialFeeOnCancelUndone(stripe as unknown as InitialFeeStripe, subEvent);
+        } catch (e) {
+          console.error(`[initial_fee] restore error sub=${subEvent.id}: ${e}`);
         }
       }
       // 払い出しは「カード確定後」だけ。created はカード入力前に発火するので割り当てない。

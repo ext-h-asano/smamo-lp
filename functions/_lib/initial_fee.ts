@@ -69,3 +69,92 @@ export function firstChargeAmountForSubscription(metadata?: Record<string, strin
   }
   return amount;
 }
+
+/** 初期費用の請求明細を Stripe 上で探す・消す・作るのに要る最小限の API。テストで差し替える。 */
+export interface InitialFeeStripe {
+  invoiceItems: {
+    list(params: { customer: string; pending: boolean; limit: number }): Promise<{
+      data: Array<{
+        id: string;
+        metadata?: Record<string, string> | null;
+        subscription?: string | { id: string } | null;
+        parent?: { subscription_details?: { subscription?: string } | null } | null;
+      }>;
+    }>;
+    del(id: string): Promise<unknown>;
+    create(params: {
+      customer: string;
+      subscription: string;
+      amount: number;
+      currency: string;
+      description: string;
+      metadata: Record<string, string>;
+    }): Promise<unknown>;
+  };
+}
+
+interface TrialSub {
+  id: string;
+  customer: string | { id: string };
+  status: string;
+  metadata?: Record<string, string> | null;
+}
+
+async function pendingInitialFeeItemIds(stripe: InitialFeeStripe, sub: TrialSub): Promise<string[]> {
+  const customer = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  const { data } = await stripe.invoiceItems.list({ customer, pending: true, limit: 100 });
+  return data
+    .filter((ii) => ii.metadata?.kind === "initial_fee")
+    .filter((ii) => {
+      const legacy = typeof ii.subscription === "string" ? ii.subscription : ii.subscription?.id;
+      return (ii.parent?.subscription_details?.subscription ?? legacy) === sub.id;
+    })
+    .map((ii) => ii.id);
+}
+
+/**
+ * お試し期間中に解約予約が入ったら、その契約に付いた初期費用の明細を消す。
+ *
+ * checkout.ts は初期費用を「次の請求に載る明細」として先に作っておく。お試し中に解約予約
+ * (cancel_at) が入ると、お試し終了＝契約終了の時点で Stripe がこの明細だけを請求してしまい、
+ * 解約した人に ¥33,000 が請求された（2026-10-31 実例）。お試し中でなければ初期費用は
+ * 初回請求で精算済みなので何もしない。
+ */
+export async function removeInitialFeeOnTrialCancel(
+  stripe: InitialFeeStripe,
+  sub: TrialSub,
+): Promise<number> {
+  if (sub.status !== "trialing") return 0;
+  const ids = await pendingInitialFeeItemIds(stripe, sub);
+  for (const id of ids) await stripe.invoiceItems.del(id);
+  if (ids.length > 0) {
+    console.log(`[initial_fee] お試し中の解約予約で初期費用を取り消し: sub=${sub.id} items=${ids.join(",")}`);
+  }
+  return ids.length;
+}
+
+/**
+ * お試し期間中に解約予約が取り消されたら、消した初期費用の明細を付け直す。
+ * 免除契約・初期費用の無いプラン・すでに明細がある場合は何もしない。
+ */
+export async function restoreInitialFeeOnCancelUndone(
+  stripe: InitialFeeStripe,
+  sub: TrialSub,
+): Promise<boolean> {
+  if (sub.status !== "trialing") return false;
+  if (isSubscriptionInitialFeeWaived(sub.metadata)) return false;
+  const planKey = (sub.metadata?.plan_key as PlanKey | undefined) ?? "monthly";
+  if (!PLAN_HAS_INITIAL_FEE[planKey]) return false;
+  if ((await pendingInitialFeeItemIds(stripe, sub)).length > 0) return false;
+  const customer = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  await stripe.invoiceItems.create({
+    customer,
+    subscription: sub.id,
+    amount: INITIAL_FEE_JPY,
+    currency: "jpy",
+    description: "初期費用",
+    metadata: { kind: "initial_fee", plan_key: planKey },
+  });
+  console.log(`[initial_fee] 解約予約の取り消しで初期費用を付け直し: sub=${sub.id}`);
+  return true;
+}
